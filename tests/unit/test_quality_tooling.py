@@ -4,9 +4,12 @@ import re
 from pathlib import Path
 
 import pytest
+import yaml
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-PINNED_SHA = re.compile(r"^\s*uses:\s*[\w.-]+/[\w.-]+@([0-9a-f]{40})(\s|$)")
+# GitHub Actions are restricted to first-party actions/* pinned to an exact
+# 40-character commit SHA; tool installers must use pinned run steps instead.
+ALLOWED_ACTION = re.compile(r"^\s*uses:\s*actions/[\w.-]+@([0-9a-f]{40})(\s|$)")
 
 
 def _workflow_files() -> list[Path]:
@@ -21,7 +24,9 @@ def test_at_least_one_workflow_exists() -> None:
 def test_workflow_uses_sha_pinned_actions(workflow: Path) -> None:
     for line in workflow.read_text(encoding="utf-8").splitlines():
         if "uses:" in line:
-            assert PINNED_SHA.match(line), f"action not pinned to commit SHA: {line.strip()}"
+            assert ALLOWED_ACTION.match(line), (
+                f"action must be actions/<name>@<40-char commit SHA>: {line.strip()}"
+            )
 
 
 def test_env_example_uses_placeholders_only() -> None:
@@ -54,3 +59,8 @@ def test_required_scaffold_files_exist(required_path: str) -> None:
 
 def test_no_claude_md_exists() -> None:
     assert not (REPO_ROOT / "CLAUDE.md").exists()
+
+
+@pytest.mark.parametrize("workflow", _workflow_files(), ids=lambda p: p.name)
+def test_workflow_files_are_valid_yaml(workflow: Path) -> None:
+    assert yaml.safe_load(workflow.read_text(encoding="utf-8")) is not None
