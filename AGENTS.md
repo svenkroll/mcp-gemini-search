@@ -107,7 +107,8 @@ contradicts the ADRs, the ADRs win.
 
 - Conventional Commits, lowercase subject line, scopes from the project
   contract. Footer `Refs: #<issue>`.
-- One issue corresponds to one pull request against `main`. Only the project
+- One issue corresponds to one pull request against `main`, based on
+  `.github/pull_request_template.md` with `Closes #<issue>` as the first line. Only the project
   owner merges, preferably as a squash merge.
 - No force push to a shared branch or a branch under review.
 - "Independent review" means a review by the `reviewer` role in its own session
