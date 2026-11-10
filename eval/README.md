@@ -1,4 +1,5 @@
 # Evaluation
 
-Ground-truth catalog, judge prompt and scoring material live here. T01 leaves
-this directory empty; content arrives with T02 (see ADR 0005).
+Ground-truth catalog, judge prompt and evaluation script live here. The
+directory is still empty; the catalog format arrives with #3 and the evaluation
+script with #10 (see ADR 0005).

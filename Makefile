@@ -3,7 +3,7 @@ UV := uv
 
 .DEFAULT_GOAL := check
 
-.PHONY: install format lint typecheck test check pre-commit
+.PHONY: install format lint typecheck test test-fast check pre-commit
 
 install:
 	$(UV) python install $(PYTHON_VERSION)
@@ -22,6 +22,10 @@ typecheck:
 
 test:
 	$(UV) run pytest
+
+# Full suite without coverage threshold, for quick iteration.
+test-fast:
+	$(UV) run pytest --no-cov
 
 check: lint typecheck test
 

@@ -1,4 +1,4 @@
-"""Unit tests for the documented package placeholders created by T01."""
+"""Unit tests for the documented package placeholders created by issue #1."""
 
 import importlib
 

@@ -25,3 +25,6 @@ htmlcov/
 .idea/
 .vscode/
 .DS_Store
+
+# Temporary issue drafts, imported once into GitHub Issues
+.issue-drafts/

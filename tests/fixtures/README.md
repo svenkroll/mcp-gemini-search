@@ -1,5 +1,5 @@
 # Fixtures
 
-Controlled test fixtures live here. T01 leaves this directory empty;
-projected content arrives with T02. Fixtures must never contain API keys,
-secrets, private content or unredacted live traffic.
+Controlled test fixtures live here. The directory is still empty; hand-written
+Gemini fixtures arrive with #4. Fixtures must never contain API keys, secrets,
+private content or unredacted live traffic.

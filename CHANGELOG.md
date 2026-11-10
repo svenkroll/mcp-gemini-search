@@ -1,19 +1,34 @@
-# Änderungsprotokoll
+# Changelog
 
-Orientiert an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/) und
-[Semantic Versioning](https://semver.org/lang/de/).
+All notable changes to this project will be documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
-### Hinzugefügt
+### Changed
 
-- T01: Reproduzierbares Python-3.14-Projektgerüst mit `uv` und eingechecktem
-  `uv.lock`.
-- T01: Ruff für Formatierung und Linting, `ty` für Typprüfung, pytest mit
-  pytest-cov und 80 % Mindestabdeckung für `src/gemini_search_mcp/`.
-- T01: Make-Ziele `install`, `format`, `lint`, `typecheck`, `test`, `check`.
-- T01: pre-commit für Formatierung, Linting und Typprüfung.
-- T01: GitHub-Actions-CI für Linting, Typprüfung und Tests mit auf Commit-SHAs
-  gepinnten Actions.
-- T01: README, CONTRIBUTING, CHANGELOG, `.env.example`, `.gitignore` und
+- Tickets moved from `tickets/` to GitHub issues (#2 to #14), with an issue
+  template and evidence types per acceptance criterion.
+- ADRs revised and translated to English (new file names), ADR 0010 for
+  configuration added; `docs/offene-fragen.md` removed, its verified facts moved
+  into ADR 0002 and ADR 0006.
+- `AGENTS.md` translated to English and extended with the project contract for
+  the agent orchestrator.
+- `.env.example` aligned with the variables from ADR 0010.
+
+### Added
+
+- `make test-fast` runs the full suite without the coverage threshold.
+- `docs/roadmap.md` for topics deliberately outside release 1.
+
+- #1: Reproducible Python 3.14 project scaffolding with `uv` and committed `uv.lock`.
+- #1: Ruff for formatting and linting, `ty` for type checking, pytest with
+  pytest-cov and 80% minimum coverage for `src/gemini_search_mcp/`.
+- #1: Make targets `install`, `format`, `lint`, `typecheck`, `test`, `check`.
+- #1: pre-commit for formatting, linting, and type checking.
+- #1: GitHub Actions CI for linting, type checking, and tests with actions pinned
+  to commit SHAs.
+- #1: README, CONTRIBUTING, CHANGELOG, `.env.example`, `.gitignore`, and
   `docs/techdebt.md`.

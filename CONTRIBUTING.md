@@ -1,28 +1,31 @@
-# Beitragen
+# Contributing
 
-Grundlage für alle Arbeiten ist [`AGENTS.md`](AGENTS.md) zusammen mit dem
-jeweiligen Ticket unter [`tickets/`](tickets/) und den dort genannten ADRs.
+The foundation for all work is [`AGENTS.md`](AGENTS.md) together with the
+respective GitHub issue and the ADRs referenced there. New tickets are created
+exclusively as issues using the template `.github/ISSUE_TEMPLATE/ticket.md`.
 
-## Arbeitsweise
+## Workflow
 
-1. Ticket, genannte ADRs und betroffene Dokumentation vollständig lesen.
-2. Einen kurzen Branch nach Conventional Commits anlegen
-   (z. B. `chore/...`, `feat/...`, `fix/...`).
-3. Die kleinste vollständige Änderung umsetzen und passende Tests ergänzen.
-4. `make check` lokal grün laufen lassen.
-5. Pull Request gegen `main` mit Titel und Beschreibung nach Conventional Commits.
+1. Read the ticket, referenced ADRs, and affected documentation completely.
+2. Create a short branch following Conventional Commits
+   (e.g. `chore/...`, `feat/...`, `fix/...`).
+3. Implement the smallest complete change and add appropriate tests.
+4. Ensure `make check` passes locally (`make test-fast` for quick runs
+   without coverage threshold).
+5. Open a pull request against `main` with a title and description following
+   Conventional Commits and referencing the issue.
 
-Kein Force-Push auf einen geteilten oder zur Prüfung stehenden Branch. Keine
-Archive oder Binärdateien einchecken.
+No force push to a shared branch or a branch under review. Do not commit
+archives or binary files.
 
-## Qualität
+## Quality
 
-- Python-Abhängigkeiten ausschließlich mit `uv` verwalten und in `uv.lock`
-  festschreiben. Direkte Abhängigkeiten werden exakt gepinnt.
-- Formatierung und Linting mit Ruff, Typprüfung mit `ty`, Tests mit pytest.
-- Unit-Tests laufen ohne Netzwerk und ohne echten Gemini-Key. Fakes an den
-  Systemgrenzen, keine Mocks für interne Aufrufzahlen.
-- Mindestabdeckung 80 % für `src/gemini_search_mcp/`.
+- Manage Python dependencies exclusively with `uv` and lock them in `uv.lock`.
+  Direct dependencies are pinned exactly.
+- Formatting and linting with Ruff, type checking with `ty`, tests with pytest.
+- Unit tests run without network access and without a real Gemini key. Fakes at
+  system boundaries, no mocks for internal call counts.
+- Minimum coverage of 80% for `src/gemini_search_mcp/`.
 
 ## Pre-commit
 
@@ -31,16 +34,16 @@ uv run pre-commit install
 uv run pre-commit run --all-files
 ```
 
-Die Hooks prüfen Formatierung, Linting und Typen.
+The hooks check formatting, linting, and types.
 
-## Konfiguration und Geheimnisse
+## Configuration and Secrets
 
-- Konfiguration kommt aus Umgebungsvariablen. `.env.example` enthält nur
-  Platzhalter.
-- Nie API-Keys, Bearer-Tokens, Authorization-Header oder Geheimnisse loggen,
-  committen oder in Fixtures aufnehmen.
+- Configuration comes from environment variables. `.env.example` contains
+  placeholders only.
+- Never log, commit, or include in fixtures API keys, bearer tokens,
+  authorization headers, or secrets.
 
-## Sprache
+## Language
 
-Dokumentation, ADRs, Tickets und README sind Deutsch. Code, Bezeichner,
-Kommentare, Docstrings und Commit-Betreffzeilen sind Englisch.
+Everything is written in English: code, identifiers, comments, docstrings,
+commit messages, documentation, ADRs, and issues.
