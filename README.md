@@ -5,14 +5,22 @@ static bearer token. It provides two tools, `search` and `analyze_url`, backed b
 the Gemini Developer API. The yardstick is a correct, verifiable, and honest
 response for calling LLMs.
 
-This repository is in the **scaffolding stage (issue #1)**. It contains the
-project structure, quality tooling, and CI, but no tool, provider, or server
-implementation yet.
+This repository is under **active development**. It contains the project
+structure, quality tooling, and CI, plus the configuration and provider
+boundary described below. The `search` and `analyze_url` tools, the Gemini
+adapter, and the MCP server are not implemented yet.
 
 ## Status
 
 - Tooling: `uv`, Ruff, `ty`, pytest with coverage, pre-commit, GitHub Actions.
-- `src/gemini_search_mcp/` contains documented placeholders only.
+- `config` loads and validates every setting from ADR 0010 into one
+  pydantic-settings model and fails at startup on invalid configuration.
+- `provider` defines the provider interface from ADR 0009: the
+  `SearchProvider` protocol, its result types, and `ProviderError`.
+- `fakes` provides an in-memory `FakeProvider` so unit tests need no network
+  access and no Gemini key.
+- `gemini_client` (Gemini adapter) and `server` (MCP entry point) contain
+  documented placeholders only and are added by later issues.
 - Open tasks and deliberate debt are tracked in [`docs/techdebt.md`](docs/techdebt.md).
 
 ## Prerequisites
@@ -50,7 +58,7 @@ threshold causes `make test` to fail.
 ## Structure
 
 ```text
-src/gemini_search_mcp/  Package (only placeholders so far)
+src/gemini_search_mcp/  Package (config, provider interface, fake provider; adapter and server still placeholders)
 tests/unit/             Unit tests without network access
 tests/integration/      Integration tests
 tests/fixtures/         Controlled fixtures
