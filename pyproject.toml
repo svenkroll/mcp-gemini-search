@@ -1,0 +1,85 @@
+[project]
+name = "gemini-search-mcp"
+version = "0.0.0"
+description = "MCP server exposing Gemini-backed web search and URL analysis as search and analyze_url tools."
+readme = "README.md"
+requires-python = "==3.14.*"
+license = "MIT"
+authors = [{ name = "Sven Kroll" }]
+keywords = ["mcp", "gemini", "search"]
+classifiers = [
+    "Development Status :: 2 - Pre-Alpha",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.14",
+]
+dependencies = []
+
+[build-system]
+requires = ["hatchling==1.33.0"]
+build-backend = "hatchling.build"
+
+[dependency-groups]
+dev = [
+    "pre-commit==4.7.0",
+    "pytest==9.2.0",
+    "pytest-cov==7.1.0",
+    "pyyaml==6.0.3",
+    "ruff==0.17.4",
+    "ty==0.0.100",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/gemini_search_mcp"]
+
+[tool.uv]
+# Direct dependencies are pinned exactly; uv.lock pins the full graph.
+default-groups = ["dev"]
+
+[tool.ruff]
+target-version = "py314"
+line-length = 100
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = [
+    "E",
+    "F",
+    "W",
+    "I",
+    "B",
+    "UP",
+    "C4",
+    "SIM",
+    "RUF",
+    "S",
+]
+ignore = [
+    # S101: plain asserts are the idiomatic way to write pytest assertions.
+    "S101",
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**/*.py" = ["S101"]
+
+[tool.ty.src]
+include = ["src", "tests"]
+
+[tool.pytest.ini_options]
+minversion = "9.0"
+testpaths = ["tests"]
+addopts = [
+    "--cov=gemini_search_mcp",
+    "--cov-report=term-missing",
+    "--cov-fail-under=80",
+]
+markers = [
+    "integration: tests that cross a process or network boundary",
+]
+
+[tool.coverage.run]
+branch = true
+source = ["gemini_search_mcp"]
+
+[tool.coverage.report]
+skip_covered = false
+show_missing = true
