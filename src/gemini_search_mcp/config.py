@@ -1,6 +1,6 @@
 """Placeholder module for configuration loading.
 
-Reserved for later tickets. Configuration will come exclusively from
+Reserved for issue #2. Configuration will come exclusively from
 environment variables; never log or commit secrets.
 """
 

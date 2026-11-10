@@ -1,26 +1,26 @@
 # Gemini Search MCP
 
-Gemini Search MCP ist ein persönlicher, öffentlich erreichbarer, aber durch ein
-statisches Bearer-Token geschützter MCP-Server. Er bietet die zwei Tools
-`search` und `analyze_url` auf Basis der Gemini Developer API. Maßstab ist eine
-für aufrufende LLMs korrekte, belegbare und ehrliche Antwort.
+Gemini Search MCP is a personal, publicly reachable MCP server protected by a
+static bearer token. It provides two tools, `search` and `analyze_url`, backed by
+the Gemini Developer API. The yardstick is a correct, verifiable, and honest
+response for calling LLMs.
 
-Dieses Repository befindet sich im **Gerüststand (Ticket T01)**. Es enthält
-Projektstruktur, Qualitätswerkzeuge und CI, aber noch keine Tool-, Provider- oder
-Server-Implementierung.
+This repository is in the **scaffolding stage (issue #1)**. It contains the
+project structure, quality tooling, and CI, but no tool, provider, or server
+implementation yet.
 
 ## Status
 
-- Werkzeuge: `uv`, Ruff, `ty`, pytest mit Coverage, pre-commit, GitHub Actions.
-- `src/gemini_search_mcp/` enthält ausschließlich dokumentierte Platzhalter.
-- Offene Arbeiten und bewusste Schulden stehen in [`docs/techdebt.md`](docs/techdebt.md).
+- Tooling: `uv`, Ruff, `ty`, pytest with coverage, pre-commit, GitHub Actions.
+- `src/gemini_search_mcp/` contains documented placeholders only.
+- Open tasks and deliberate debt are tracked in [`docs/techdebt.md`](docs/techdebt.md).
 
-## Voraussetzungen
+## Prerequisites
 
-- Linux, macOS oder WSL
-- [uv](https://docs.astral.sh/uv/) (empfohlen: aktuelle Version)
-- Python 3.14 – wird von `make install` über `uv` installiert, eine globale
-  Installation ist nicht nötig
+- Linux, macOS, or WSL
+- [uv](https://docs.astral.sh/uv/) (recommended: current version)
+- Python 3.14 — installed via `uv` by `make install`; a global installation is
+  not required
 
 ## Installation
 
@@ -30,49 +30,49 @@ cd mcp-gemini-search
 make install
 ```
 
-`make install` installiert Python 3.14 und synchronisiert alle Abhängigkeiten
-aus dem eingecheckten `uv.lock`.
+`make install` installs Python 3.14 and synchronizes all dependencies from the
+committed `uv.lock`.
 
-## Lokale Prüfungen
+## Local Checks
 
-| Ziel | Zweck |
+| Target | Purpose |
 | --- | --- |
-| `make format` | Ruff-Formatierung und automatische Lint-Fixes anwenden |
-| `make lint` | Ruff-Format- und Lint-Prüfung ohne Änderungen |
-| `make typecheck` | Typprüfung mit `ty` |
-| `make test` | pytest inklusive Coverage-Schwelle |
-| `make check` | `lint`, `typecheck`, `test` in dieser Reihenfolge |
-| `make pre-commit` | Führt alle pre-commit-Hooks über alle Dateien aus |
+| `make format` | Apply Ruff formatting and automatic lint fixes |
+| `make lint` | Check Ruff format and lint without making changes |
+| `make typecheck` | Type check with `ty` |
+| `make test` | pytest including coverage threshold |
+| `make check` | `lint`, `typecheck`, `test` in that order |
+| `make pre-commit` | Run all pre-commit hooks across all files |
 
-Die Abdeckungsschwelle liegt bei 80 % für `src/gemini_search_mcp/`. Ein Lauf
-unter der Schwelle lässt `make test` fehlschlagen.
+The coverage threshold is 80% for `src/gemini_search_mcp/`. A run below the
+threshold causes `make test` to fail.
 
-## Struktur
+## Structure
 
 ```text
-src/gemini_search_mcp/  Paket (in T01 nur Platzhalter)
-tests/unit/             Unit-Tests ohne Netzwerk
-tests/integration/      Integrationstests
-tests/fixtures/         kontrollierte Fixtures
-eval/                   Ground-Truth-Katalog und Judge-Material
-docs/                   ADRs, Techdebt, weitere Dokumentation
+src/gemini_search_mcp/  Package (only placeholders so far)
+tests/unit/             Unit tests without network access
+tests/integration/      Integration tests
+tests/fixtures/         Controlled fixtures
+eval/                   Ground-truth catalog and judge material
+docs/                   ADRs, tech debt, additional documentation
 .github/workflows/      CI
 ```
 
-## Dokumentation
+## Documentation
 
-- Arbeitsregeln: [`AGENTS.md`](AGENTS.md)
-- Architekturentscheidungen: [`docs/adr/`](docs/adr/)
-- Entscheidungs- und Verifikationskatalog: [`docs/offene-fragen.md`](docs/offene-fragen.md)
-- Tickets: [`tickets/`](tickets/)
-- Änderungen: [`CHANGELOG.md`](CHANGELOG.md)
-- Mitwirken: [`CONTRIBUTING.md`](CONTRIBUTING.md)
+- Working rules: [`AGENTS.md`](AGENTS.md)
+- Architectural Decision Records: [`docs/adr/`](docs/adr/)
+- Tickets: [GitHub Issues](https://github.com/svenkroll/mcp-gemini-search/issues), template in [`.github/ISSUE_TEMPLATE/ticket.md`](.github/ISSUE_TEMPLATE/ticket.md)
+- Roadmap: [`docs/roadmap.md`](docs/roadmap.md)
+- Changelog: [`CHANGELOG.md`](CHANGELOG.md)
+- Contributing: [`CONTRIBUTING.md`](CONTRIBUTING.md)
 
-## Ideengeber
+## Attribution
 
-Der Funktionsumfang orientiert sich am Referenzprojekt nav9v. Diese Neuauflage
-ist eine eigenständige Entwicklung unter MIT-Lizenz und kein Fork.
+The feature scope is modeled after the reference project nav9v. This new edition
+is an independent development under the MIT license, not a fork.
 
-## Lizenz
+## License
 
-MIT, siehe [`LICENSE`](LICENSE).
+MIT, see [`LICENSE`](LICENSE).
