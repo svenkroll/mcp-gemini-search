@@ -20,6 +20,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- #2: `config` module with the single pydantic-settings model from ADR 0010,
+  `ConfigError` and `load_settings_or_exit()` exiting with code 2.
+- #2: `provider` module with the `SearchProvider` protocol, data objects and
+  `ProviderError` from ADR 0009, plus `FakeProvider` for unit tests.
+- `pydantic` and `pydantic-settings` as direct dependencies.
 - `make test-fast` runs the full suite without the coverage threshold.
 - `docs/roadmap.md` for topics deliberately outside release 1.
 
