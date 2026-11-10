@@ -271,3 +271,153 @@ def test_process_exits_with_code_2_without_api_key() -> None:
     assert result.returncode == 2
     assert "GEMINI_API_KEY" in result.stderr
     assert result.stdout == ""
+
+
+# --- Additional coverage: value-level checks that must be able to fail ---
+
+# (variable, lower bound, upper bound, expected parsed values)
+LIMIT_RANGE = [
+    ("GEMINI_TIMEOUT_SECONDS", "1", "300", (1, 300)),
+    ("GEMINI_MAX_CONCURRENCY", "1", "32", (1, 32)),
+    ("GEMINI_MAX_RETRIES", "0", "5", (0, 5)),
+    ("MCP_PORT", "1", "65535", (1, 65535)),
+]
+
+
+@pytest.mark.parametrize(("variable", "low", "high", "expected"), LIMIT_RANGE)
+def test_limit_boundaries_are_accepted_with_their_exact_values(
+    variable: str, low: str, high: str, expected: tuple[int, int]
+) -> None:
+    field = variable.lower()
+    for raw, parsed in zip((low, high), expected, strict=True):
+        with environment(GEMINI_API_KEY=SECRET_KEY, **{variable: raw}):
+            settings = load_settings()
+        assert getattr(settings, field) == parsed
+
+
+@pytest.mark.parametrize(("variable", "low", "high", "expected"), LIMIT_RANGE)
+def test_one_step_outside_each_boundary_is_rejected_with_the_rule(
+    variable: str, low: str, high: str, expected: tuple[int, int]
+) -> None:
+    del expected
+    below = str(int(low) - 1)
+    above = str(int(high) + 1)
+    rule = next(rule for name, _, _, _, rule in LIMITS if name == variable)
+    for raw in (below, above):
+        with (
+            environment(GEMINI_API_KEY=SECRET_KEY, **{variable: raw}),
+            pytest.raises(ConfigError) as excinfo,
+        ):
+            load_settings()
+        assert excinfo.value.variable == variable
+        assert excinfo.value.rule == rule
+        assert str(excinfo.value) == f"Invalid configuration: {variable} {rule}."
+
+
+def test_non_integer_limit_value_names_the_variable_not_the_value() -> None:
+    with (
+        environment(GEMINI_API_KEY=SECRET_KEY, GEMINI_TIMEOUT_SECONDS="sixty"),
+        pytest.raises(ConfigError) as excinfo,
+    ):
+        load_settings()
+    assert excinfo.value.variable == "GEMINI_TIMEOUT_SECONDS"
+    assert excinfo.value.rule == "must be between 1 and 300"
+    assert "sixty" not in str(excinfo.value)
+
+
+@pytest.mark.parametrize("value", ["true", "1", "TRUE"])
+def test_log_queries_accepts_boolean_true_values(value: str) -> None:
+    with environment(GEMINI_API_KEY=SECRET_KEY, LOG_QUERIES=value):
+        assert load_settings().log_queries is True
+
+
+@pytest.mark.parametrize("value", ["false", "0", "FALSE"])
+def test_log_queries_accepts_boolean_false_values(value: str) -> None:
+    with environment(GEMINI_API_KEY=SECRET_KEY, LOG_QUERIES=value):
+        assert load_settings().log_queries is False
+
+
+@pytest.mark.parametrize("value", ["2", "-1", "maybe", "yes please"])
+def test_log_queries_rejects_non_boolean_values(value: str) -> None:
+    with (
+        environment(GEMINI_API_KEY=SECRET_KEY, LOG_QUERIES=value),
+        pytest.raises(ConfigError) as excinfo,
+    ):
+        load_settings()
+    assert excinfo.value.variable == "LOG_QUERIES"
+    assert excinfo.value.rule == "must be a boolean"
+
+
+@pytest.mark.parametrize("transport", ["stdio", "http"])
+def test_mcp_transport_accepts_each_documented_value(transport: str) -> None:
+    extra = {"MCP_BEARER_TOKEN": LONG_TOKEN} if transport == "http" else {}
+    with environment(GEMINI_API_KEY=SECRET_KEY, MCP_TRANSPORT=transport, **extra):
+        assert load_settings().mcp_transport == transport
+
+
+@pytest.mark.parametrize("level", ["debug", "info", "warning", "error"])
+def test_log_level_accepts_each_documented_value(level: str) -> None:
+    with environment(GEMINI_API_KEY=SECRET_KEY, LOG_LEVEL=level):
+        assert load_settings().log_level == level
+
+
+def test_bearer_token_exactly_at_the_minimum_length_is_accepted() -> None:
+    token = "a" * 32
+    with environment(GEMINI_API_KEY=SECRET_KEY, MCP_TRANSPORT="http", MCP_BEARER_TOKEN=token):
+        assert load_settings().mcp_bearer_token is not None
+
+
+def test_bearer_token_one_character_below_the_minimum_is_rejected() -> None:
+    token = "a" * 31
+    with (
+        environment(GEMINI_API_KEY=SECRET_KEY, MCP_TRANSPORT="http", MCP_BEARER_TOKEN=token),
+        pytest.raises(ConfigError) as excinfo,
+    ):
+        load_settings()
+    assert excinfo.value.variable == "MCP_BEARER_TOKEN"
+    assert excinfo.value.rule == (
+        "is required for MCP_TRANSPORT=http and must be at least 32 characters"
+    )
+    assert token not in str(excinfo.value)
+
+
+def test_missing_api_key_exit_message_never_contains_environment_values(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    with (
+        environment(MCP_TRANSPORT="http", MCP_BEARER_TOKEN=LONG_TOKEN),
+        pytest.raises(SystemExit) as excinfo,
+    ):
+        load_settings_or_exit()
+    assert excinfo.value.code == 2
+    stderr = capsys.readouterr().err
+    assert "GEMINI_API_KEY" in stderr
+    assert "must be set and not empty" in stderr
+    assert LONG_TOKEN not in stderr
+
+
+def test_secrets_are_redacted_in_model_dump() -> None:
+    with environment(
+        GEMINI_API_KEY=SECRET_KEY,
+        MCP_TRANSPORT="http",
+        MCP_BEARER_TOKEN=SECRET_TOKEN,
+    ):
+        settings = load_settings()
+    dumped = str(settings.model_dump()) + settings.model_dump_json()
+    assert SECRET_KEY not in dumped
+    assert SECRET_TOKEN not in dumped
+    masked = settings.model_dump()["gemini_api_key"]
+    assert masked.get_secret_value() == SECRET_KEY
+
+
+def test_repr_of_http_settings_with_token_hides_the_secret() -> None:
+    with environment(
+        GEMINI_API_KEY=SECRET_KEY,
+        MCP_TRANSPORT="http",
+        MCP_BEARER_TOKEN=SECRET_TOKEN,
+    ):
+        settings = load_settings()
+    representation = repr(settings)
+    assert "mcp_transport='http'" in representation
+    assert SECRET_TOKEN not in representation
+    assert SECRET_KEY not in representation

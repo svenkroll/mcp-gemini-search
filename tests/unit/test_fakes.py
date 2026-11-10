@@ -73,3 +73,64 @@ def test_missing_preset_for_called_operation_is_rejected() -> None:
     provider = FakeProvider(analyze_url=[URL_RESULT])
     with pytest.raises(TypeError, match="search"):
         asyncio.run(provider.search("query"))
+
+
+# --- Additional coverage: both preset results and all error kinds per operation ---
+
+URL_RESULTS = [
+    UrlAnalysisResult(answer=f"url answer {index}", retrievals=[], usage=USAGE, model="model")
+    for index in range(2)
+]
+
+
+def test_analyze_url_returns_preset_results_in_order() -> None:
+    provider = FakeProvider(analyze_url=URL_RESULTS)
+    assert asyncio.run(provider.analyze_url("https://a.example", "one")) is URL_RESULTS[0]
+    assert asyncio.run(provider.analyze_url("https://b.example", "two")) is URL_RESULTS[1]
+    assert asyncio.run(provider.analyze_url("https://c.example", "three")) is URL_RESULTS[-1]
+    assert provider.calls["analyze_url"] == [
+        ("https://a.example", "one"),
+        ("https://b.example", "two"),
+        ("https://c.example", "three"),
+    ]
+
+
+@pytest.mark.parametrize("kind", ["unavailable", "rejected", "internal"])
+def test_analyze_url_raises_preset_error_kind(kind: ProviderErrorKind) -> None:
+    provider = FakeProvider(analyze_url=[URL_RESULT, kind])
+    assert asyncio.run(provider.analyze_url("https://example.com", "why?")) is URL_RESULT
+    with pytest.raises(ProviderError) as excinfo:
+        asyncio.run(provider.analyze_url("https://example.com", "again"))
+    assert excinfo.value.kind == kind
+
+
+def test_search_raises_preset_error_instance_passed_in() -> None:
+    error = ProviderError("internal", "boom")
+    provider = FakeProvider(search=[error])
+    with pytest.raises(ProviderError) as excinfo:
+        asyncio.run(provider.search("query"))
+    assert excinfo.value is error
+    assert excinfo.value.kind == "internal"
+
+
+def test_search_and_analyze_url_presets_are_independent() -> None:
+    provider = FakeProvider(search=["unavailable"], analyze_url=[URL_RESULT])
+    with pytest.raises(ProviderError):
+        asyncio.run(provider.search("query"))
+    assert asyncio.run(provider.analyze_url("https://example.com", "why?")) is URL_RESULT
+    assert provider.calls["search"] == [("query",)]
+    assert provider.calls["analyze_url"] == [("https://example.com", "why?")]
+
+
+def test_missing_preset_for_analyze_url_is_rejected() -> None:
+    provider = FakeProvider(search=SEARCH_RESULTS)
+    with pytest.raises(TypeError, match="analyze_url"):
+        asyncio.run(provider.analyze_url("https://example.com", "why?"))
+
+
+def test_default_fake_provider_has_no_presets() -> None:
+    provider = FakeProvider()
+    with pytest.raises(TypeError):
+        asyncio.run(provider.search("query"))
+    with pytest.raises(TypeError):
+        asyncio.run(provider.analyze_url("https://example.com", "why?"))

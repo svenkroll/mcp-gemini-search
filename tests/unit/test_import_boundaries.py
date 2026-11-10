@@ -140,3 +140,71 @@ def test_rule_detects_relative_import_of_foreign_sibling() -> None:
 def test_boundary_constants() -> None:
     assert _top_level("google.genai") == "google"
     assert list(imported_modules("import a.b\nfrom c import d\n")) == ["a.b", "c"]
+
+
+# --- Additional coverage: AC5 synthetic cases for provider.py and fakes ---
+
+
+@pytest.mark.parametrize(
+    ("source", "forbidden"),
+    [
+        ("import fastmcp", "fastmcp"),
+        ("import fastmcp as fm", "fastmcp"),
+        ("from fastmcp import FastMCP", "fastmcp"),
+        ("import google.genai", "google.genai"),
+        ("import google.genai as genai", "google.genai"),
+        ("from google import genai", "google"),
+        ("from google.genai import types", "google.genai"),
+        ("if True:\n    import fastmcp\n", "fastmcp"),
+        ("def load() -> None:\n    from google.genai import types\n", "google.genai"),
+    ],
+)
+def test_provider_synthetic_source_with_fastmcp_or_gemini_is_a_violation(
+    source: str, forbidden: str
+) -> None:
+    found = violations("provider", source)
+    assert found, f"provider must not import {forbidden}: {source!r}"
+    assert any(forbidden in item for item in found)
+
+
+def test_provider_synthetic_violation_in_a_larger_module_is_detected() -> None:
+    source = (
+        "from dataclasses import dataclass\n"
+        "from typing import Protocol\n"
+        "import fastmcp\n"
+        "from google.genai import types\n"
+        "\n"
+        "class SearchProvider(Protocol): ...\n"
+    )
+    found = violations("provider", source)
+    assert any("fastmcp" in item for item in found)
+    assert any("google.genai" in item for item in found)
+
+
+def test_existing_provider_module_has_no_such_imports() -> None:
+    source = (SOURCE_ROOT / "provider.py").read_text(encoding="utf-8")
+    assert violations("provider", source) == []
+    assert "fastmcp" not in source
+    assert "google" not in source
+
+
+@pytest.mark.parametrize("module", ["config", "provider", "gemini_client", "urlpolicy", "tools"])
+def test_fastmcp_is_a_violation_outside_the_server(module: str) -> None:
+    assert any("fastmcp" in item for item in violations(module, "import fastmcp\n"))
+
+
+def test_server_may_import_fastmcp() -> None:
+    assert violations("server", "import fastmcp\n") == []
+
+
+def test_fakes_module_is_not_bound_to_the_gemini_sdk_or_fastmcp() -> None:
+    # ``fakes`` is test support, not a layer with a row in ADR 0009, so the
+    # table helper does not police it. It must still stay on the domain
+    # provider and the standard library.
+    assert "fakes" not in ALLOWED_IMPORTS
+    source = (SOURCE_ROOT / "fakes.py").read_text(encoding="utf-8")
+    imported = {_top_level(name) for name in imported_modules(source)}
+    assert "fastmcp" not in imported
+    assert "google" not in imported
+    allowed = (sys.stdlib_module_names | {PACKAGE}) - {"fastmcp", "google"}
+    assert imported <= allowed
