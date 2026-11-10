@@ -8,7 +8,6 @@ import gemini_search_mcp
 
 PLACEHOLDER_MODULES = [
     "gemini_search_mcp",
-    "gemini_search_mcp.config",
     "gemini_search_mcp.gemini_client",
     "gemini_search_mcp.server",
 ]
@@ -27,7 +26,6 @@ def test_package_exposes_version() -> None:
 
 
 def test_placeholder_constants() -> None:
-    assert importlib.import_module("gemini_search_mcp.config").ENV_PREFIX == "GEMINI_SEARCH_MCP_"
     client = importlib.import_module("gemini_search_mcp.gemini_client")
     assert client.PROVIDER_NAME == "gemini"
     server = importlib.import_module("gemini_search_mcp.server")

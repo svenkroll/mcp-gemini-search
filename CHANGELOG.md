@@ -20,6 +20,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- #2: `config` loads every variable from ADR 0010 through one pydantic-settings
+  model, with defaults and limit checks; `load_settings()` raises `ConfigError`
+  naming only the variable and the rule, and `load_settings_or_exit()` exits
+  with code 2. Secrets are typed `SecretStr` and stay out of `repr` and `str`.
+- #2: `provider` defines the `SearchProvider` protocol, the data objects
+  `Usage`, `Citation`, `SearchResult`, `Retrieval` and `UrlAnalysisResult`, and
+  `ProviderError` (ADR 0009), so adapter, tools and server build against fixed
+  interfaces.
+- #2: `fakes.FakeProvider` serves preset results or errors per call for
+  network-free unit tests.
+- #2: `tests/unit/test_import_boundary.py` enforces the ADR 0009 module table via
+  the AST and grows with modules as later issues add them.
+
 - `make test-fast` runs the full suite without the coverage threshold.
 - `docs/roadmap.md` for topics deliberately outside release 1.
 
