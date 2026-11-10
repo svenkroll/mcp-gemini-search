@@ -38,7 +38,6 @@ _VARIABLES: Final[dict[str, tuple[SettingName, str]]] = {
     "log_queries": ("LOG_QUERIES", "must be a boolean"),
     "log_level": ("LOG_LEVEL", "must be one of debug, info, warning, error"),
     "mcp_transport": ("MCP_TRANSPORT", "must be one of stdio, http"),
-    "mcp_host": ("MCP_HOST", "must not be empty"),
     "mcp_port": ("MCP_PORT", "must be between 1 and 65535"),
     "mcp_bearer_token": (
         "MCP_BEARER_TOKEN",
