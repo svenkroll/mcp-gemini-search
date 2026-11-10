@@ -21,5 +21,6 @@ Closes #<issue>
 ## Details
 
 - Coverage: <value> (threshold <value>)
-- Rounds: <n>/3
+- Fix rounds: <n>/3
+  - <Round n: trigger → owner → result, one line per round, or "none">
 - Implementer role: <implementer | implementer-strong>

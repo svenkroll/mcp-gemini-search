@@ -22,6 +22,12 @@ If it does not fit into one pull request, split it.
 
 - <concrete, verifiable requirements: names, values, interfaces, file paths>
 
+## Known Edge Cases
+
+<Optional. Boundary cases the solution must handle explicitly, as far as they are known: empty or absent values, values as they appear in example files, unusual but valid inputs, structure announced for later in the ADRs. One bullet per case with the expected behavior. Write "none" if none are known.>
+
+- <case>: <expected behavior>
+
 ## Out of Scope
 
 - <what is explicitly not built>
