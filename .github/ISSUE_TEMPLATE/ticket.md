@@ -21,7 +21,7 @@ If it does not fit into one pull request, split it.
 ## Requirements
 
 - <concrete, verifiable requirements: names, values, interfaces, file paths>
-- <for every new public interface: module, function or endpoint, signature, error behavior. Tests are written before the implementation and need this.>
+- <describe behavior, data and limits. No signatures or internal structures; the architect designs them. Exception: external contracts others already use, e.g. an existing API format.>
 
 ## Reproduction
 

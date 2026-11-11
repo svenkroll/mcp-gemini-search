@@ -2,8 +2,11 @@
 
 This file is the central instruction for people and agents working on this
 repository, in particular for the OpenHands orchestrator and its roles
-`implementer`, `implementer-strong`, `test-writer` and `reviewer`. There is
-deliberately no `CLAUDE.md` and no second copy of these rules.
+`architect`, `implementer`, `implementer-strong`, `test-writer` and `reviewer`.
+There is deliberately no `CLAUDE.md` and no second copy of these rules.
+
+The "Project Contract" section is mandatory. If a required entry is missing,
+the orchestrator stops with `CONTRACT_INCOMPLETE`.
 
 ## Project Contract
 
@@ -17,6 +20,8 @@ deliberately no `CLAUDE.md` and no second copy of these rules.
 - **Protected test configuration:** `tests/conftest.py`, `Makefile`,
   the `[tool.pytest.*]` and `[tool.coverage.*]` sections of `pyproject.toml`,
   `.github/workflows/`
+- **Dependency files:** `uv.lock`, the `[project] dependencies` and
+  `[dependency-groups]` entries of `pyproject.toml`
 - **Minimum coverage:** 80 % for `src/gemini_search_mcp/`, enforced by
   `--cov-fail-under=80`. This is the only coverage threshold.
 - **Lint (check only):** `make lint`
@@ -62,6 +67,11 @@ contradicts the ADRs, the ADRs win.
 - Layers: `config`, `provider`, `gemini_client` (adapter), `urlpolicy`, `tools`,
   `server`, with the import rules from ADR 0009. Only `server` imports FastMCP.
   Gemini SDK types never leave the adapter.
+- Design: the provider interface and its data objects live in `provider.py`
+  exactly as in ADR 0009. Tool input and output models live next to their tool
+  under `tools/`. All other signatures and internal structures are designed by
+  the `architect`; issues describe behavior only. Stubs raise
+  `NotImplementedError`.
 - The HTTP transport is stateless. stdio and Streamable HTTP serve the same tool
   contract.
 - Field names, error codes and environment variables are defined in ADR 0003,
@@ -88,7 +98,8 @@ contradicts the ADRs, the ADRs win.
   Direct dependencies are pinned exactly. Add new dependencies only when the
   issue names them.
 - Ruff formats and lints, `ty` checks types, pytest checks behavior.
-- Tests live under `tests/unit/` and `tests/integration/`. Tests for acceptance
+- Tests live under `tests/unit/` and `tests/integration/`; tests for the
+  evaluation tooling under `eval/` live under `tests/eval/`. Tests for acceptance
   criteria and known edge cases carry the ID in their name (`ac<n>` / `ec<n>`,
   e.g. `test_ac2_rejects_empty_token`).
 - Unit tests run without network access and without a real Gemini key. They use
@@ -115,7 +126,8 @@ contradicts the ADRs, the ADRs win.
 ## Git and Review
 
 - Conventional Commits, lowercase subject line, scopes from the project
-  contract. Footer `Refs: #<issue>`.
+  contract. Footer `Refs: #<issue>`. Within the agent workflow only the
+  orchestrator commits.
 - One issue corresponds to one pull request against `main`, based on
   `.github/pull_request_template.md` with `Closes #<issue>` as the first line. Only the project
   owner merges, preferably as a squash merge.
