@@ -11,6 +11,12 @@ deliberately no `CLAUDE.md` and no second copy of these rules.
 - **Setup:** `make install`
 - **Test (fast):** `make test-fast` (full suite without coverage threshold)
 - **Test (gate):** `make test` (full suite with coverage measurement)
+- **Test (targeted):** `uv run pytest {tests} -q --no-cov -p no:cacheprovider`
+  (only the given test files, no coverage threshold)
+- **Test paths:** `tests/`
+- **Protected test configuration:** `tests/conftest.py`, `Makefile`,
+  the `[tool.pytest.*]` and `[tool.coverage.*]` sections of `pyproject.toml`,
+  `.github/workflows/`
 - **Minimum coverage:** 80 % for `src/gemini_search_mcp/`, enforced by
   `--cov-fail-under=80`. This is the only coverage threshold.
 - **Lint (check only):** `make lint`
@@ -82,6 +88,9 @@ contradicts the ADRs, the ADRs win.
   Direct dependencies are pinned exactly. Add new dependencies only when the
   issue names them.
 - Ruff formats and lints, `ty` checks types, pytest checks behavior.
+- Tests live under `tests/unit/` and `tests/integration/`. Tests for acceptance
+  criteria and known edge cases carry the ID in their name (`ac<n>` / `ec<n>`,
+  e.g. `test_ac2_rejects_empty_token`).
 - Unit tests run without network access and without a real Gemini key. They use
   fakes at system boundaries and controlled, hand-written fixtures.
 - Every error code from ADR 0007 and every limit from ADR 0003, 0004 and 0008

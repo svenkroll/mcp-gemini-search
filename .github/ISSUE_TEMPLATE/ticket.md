@@ -21,6 +21,11 @@ If it does not fit into one pull request, split it.
 ## Requirements
 
 - <concrete, verifiable requirements: names, values, interfaces, file paths>
+- <for every new public interface: module, function or endpoint, signature, error behavior. Tests are written before the implementation and need this.>
+
+## Reproduction
+
+<Only for type fix: steps to reproduce, expected behavior, actual behavior (error message, wrong value). Otherwise "none".>
 
 ## Known Edge Cases
 
