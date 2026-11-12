@@ -1,0 +1,24 @@
+{
+  "id": "int_search_no_title",
+  "status": "completed",
+  "model": "gemini-3.8-flash",
+  "steps": [
+    {
+      "type": "model_output",
+      "content": [
+        {
+          "type": "text",
+          "text": "Hello.",
+          "annotations": [
+            {
+              "type": "url_citation",
+              "url": "https://example.com/no-title",
+              "start_index": 0,
+              "end_index": 5
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,32 @@
+{
+  "id": "int_search_non_ascii",
+  "status": "completed",
+  "model": "gemini-3.8-flash",
+  "steps": [
+    {
+      "type": "model_output",
+      "content": [
+        {
+          "type": "text",
+          "text": "Grüße 🌍 aus Köln.",
+          "annotations": [
+            {
+              "type": "url_citation",
+              "url": "https://example.com/globe",
+              "title": "Globe",
+              "start_index": 8,
+              "end_index": 12
+            },
+            {
+              "type": "url_citation",
+              "url": "https://example.com/cologne",
+              "title": "Cologne",
+              "start_index": 17,
+              "end_index": 22
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
