@@ -1,0 +1,15 @@
+# Draft example case for the category url_pdf (ADR 0005, issue #3).
+# The project owner replaces it with a real case. The URL is the PDF
+# variant of an RFC at the RFC Editor, as required by ADR 0005.
+id: analyze-url-pdf-001
+tool: analyze_url
+category: url_pdf
+input:
+  url: "https://www.rfc-editor.org/rfc/pdfrfc/rfc1035.txt.pdf"
+  question: "What does RFC 1035 define?"
+expected: "RFC 1035 defines the implementation of the Domain Name System."
+allowed_sources:
+  - rfc-editor.org
+ground_truth_date: 2026-11-10
+expected_outcome: answer
+draft: true

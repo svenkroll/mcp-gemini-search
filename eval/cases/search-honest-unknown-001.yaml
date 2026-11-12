@@ -1,0 +1,15 @@
+# Draft example case for the category honest_unknown (ADR 0005, issue #3).
+# The project owner replaces it with a real case: a question whose answer
+# is not publicly verifiable, so the honest result is an explicit unknown.
+id: search-honest-unknown-001
+tool: search
+category: honest_unknown
+input:
+  query: "What is the middle name of the author of RFC 1035?"
+expected: "The tool states that it could not verify the middle name instead of inventing one."
+allowed_sources:
+  - rfc-editor.org
+  - ietf.org
+ground_truth_date: 2026-11-10
+expected_outcome: honest_unknown
+draft: true

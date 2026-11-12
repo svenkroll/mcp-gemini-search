@@ -1,0 +1,14 @@
+# Draft example case for the category current_fact (ADR 0005, issue #3).
+# The project owner replaces it with a real case and keeps the reference
+# date fresh: a current_fact older than 90 days produces a warning.
+id: search-current-001
+tool: search
+category: current_fact
+input:
+  query: "What is the latest stable Python release?"
+expected: "Python 3.14 is the latest stable Python release."
+allowed_sources:
+  - python.org
+ground_truth_date: 2026-11-10
+expected_outcome: answer
+draft: true

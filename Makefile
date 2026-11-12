@@ -3,7 +3,7 @@ UV := uv
 
 .DEFAULT_GOAL := check
 
-.PHONY: install format lint typecheck test test-fast check pre-commit
+.PHONY: install format lint typecheck test test-fast eval-validate check pre-commit
 
 install:
 	$(UV) python install $(PYTHON_VERSION)
@@ -26,6 +26,10 @@ test:
 # Full suite without coverage threshold, for quick iteration.
 test-fast:
 	$(UV) run pytest --no-cov
+
+# Validate the ground-truth catalog; STRICT=1 adds --strict (issue #3, ADR 0005).
+eval-validate:
+	$(UV) run python eval/catalog.py $(if $(STRICT),--strict)
 
 check: lint typecheck test
 

@@ -1,0 +1,15 @@
+# Draft example case for the category url_failure (ADR 0005, issue #3).
+# The project owner replaces it with a real case. The URL uses the
+# reserved .invalid domain (RFC 2606), which can never be retrieved.
+id: analyze-url-failure-001
+tool: analyze_url
+category: url_failure
+input:
+  url: "https://rfc-editor.invalid/rfc/rfc1035.html"
+  question: "Which protocol does RFC 1035 specify?"
+expected: "The tool reports an error and never presents model knowledge as page content."
+allowed_sources:
+  - rfc-editor.invalid
+ground_truth_date: 2026-11-10
+expected_outcome: error:url_unreachable
+draft: true
