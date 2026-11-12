@@ -145,7 +145,12 @@ class FakeProvider:
         ``ProviderError("internal")`` when more ``search`` calls happen than
         outcomes were preset.
         """
-        raise NotImplementedError
+        if not self._search_outcomes:
+            raise ProviderError("internal", "no preset search outcome left")
+        outcome = self._search_outcomes.popleft()
+        if isinstance(outcome, ProviderError):
+            raise outcome
+        return outcome
 
     async def analyze_url(self, url: str, question: str) -> UrlAnalysisResult:
         """Consume the next preset ``analyze_url`` outcome.
@@ -155,4 +160,9 @@ class FakeProvider:
         ``ProviderError("internal")`` when more ``analyze_url`` calls happen
         than outcomes were preset.
         """
-        raise NotImplementedError
+        if not self._analyze_url_outcomes:
+            raise ProviderError("internal", "no preset analyze_url outcome left")
+        outcome = self._analyze_url_outcomes.popleft()
+        if isinstance(outcome, ProviderError):
+            raise outcome
+        return outcome

@@ -10,9 +10,11 @@ the variable and the violated rule, never the value. The entry point variant
 exit code 2.
 """
 
+import sys
+from collections.abc import Mapping
 from typing import Any, Literal, Self
 
-from pydantic import Field, SecretStr, field_validator, model_validator
+from pydantic import Field, SecretStr, ValidationError, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 LogLevel = Literal["debug", "info", "warning", "error"]
@@ -40,6 +42,64 @@ class ConfigError(Exception):
         self.variable = variable
         self.rule = rule
         super().__init__(f"{variable}: {rule}")
+
+
+_FIELD_VARIABLES: dict[str, str] = {
+    "gemini_api_key": "GEMINI_API_KEY",
+    "gemini_model": "GEMINI_MODEL",
+    "gemini_timeout_seconds": "GEMINI_TIMEOUT_SECONDS",
+    "gemini_max_concurrency": "GEMINI_MAX_CONCURRENCY",
+    "gemini_max_retries": "GEMINI_MAX_RETRIES",
+    "log_queries": "LOG_QUERIES",
+    "log_level": "LOG_LEVEL",
+    "mcp_transport": "MCP_TRANSPORT",
+    "mcp_host": "MCP_HOST",
+    "mcp_port": "MCP_PORT",
+    "mcp_bearer_token": "MCP_BEARER_TOKEN",
+}
+
+_NUMERIC_RANGES: dict[str, tuple[int, int]] = {
+    "gemini_timeout_seconds": (1, 300),
+    "gemini_max_concurrency": (1, 32),
+    "gemini_max_retries": (0, 5),
+    "mcp_port": (1, 65535),
+}
+
+_INTEGER_ERROR_TYPES = frozenset({"int_parsing", "int_type", "int_from_float"})
+_BOUND_ERROR_TYPES = frozenset(
+    {"greater_than", "greater_than_equal", "less_than", "less_than_equal"}
+)
+
+
+def _rule_for_error(field: str, error_type: str) -> str:
+    """Return the ADR 0010 rule text for one pydantic error, never a value."""
+    if field in _NUMERIC_RANGES:
+        low, high = _NUMERIC_RANGES[field]
+        if error_type in _BOUND_ERROR_TYPES:
+            return f"must be between {low} and {high}"
+        return "must be an integer"
+    if field == "log_queries":
+        return "must be a boolean"
+    if field == "log_level":
+        return "must be one of debug, info, warning, error"
+    if field == "mcp_transport":
+        return "must be one of stdio or http"
+    return "must not be empty"
+
+
+def _config_error_from_validation(error: ValidationError) -> ConfigError:
+    """Translate the first pydantic error into a :class:`ConfigError`.
+
+    Only the field name and a fixed rule text are used; the offending value
+    never reaches the resulting exception.
+    """
+    for detail in error.errors():
+        location = detail.get("loc", ())
+        field = str(location[0]) if location else ""
+        variable = _FIELD_VARIABLES.get(field, field.upper())
+        rule = _rule_for_error(field, str(detail.get("type", "")))
+        return ConfigError(variable, rule)
+    return ConfigError("CONFIG", "is invalid")
 
 
 class Settings(BaseSettings):
@@ -100,7 +160,13 @@ class Settings(BaseSettings):
         all variables, so an empty ``GEMINI_API_KEY`` and one consisting only
         of whitespace both fail like a missing one.
         """
-        raise NotImplementedError
+        if not isinstance(data, Mapping):
+            return data
+        return {
+            key: value
+            for key, value in data.items()
+            if not (isinstance(value, str) and not value.strip())
+        }
 
     @field_validator("log_level", "mcp_transport", mode="before")
     @classmethod
@@ -114,7 +180,9 @@ class Settings(BaseSettings):
         empty or whitespace-only never reach this validator; the blank rule
         above treats them as unset.
         """
-        raise NotImplementedError
+        if not isinstance(value, str):
+            return value
+        return value.strip().lower()
 
     @model_validator(mode="after")
     def _http_requires_bearer_token(self) -> Self:
@@ -128,7 +196,14 @@ class Settings(BaseSettings):
         missing or too short one, is accepted. Raises ``ConfigError`` (not a
         ``ValidationError``), which propagates unchanged out of construction.
         """
-        raise NotImplementedError
+        if self.mcp_transport == "http":
+            token = self.mcp_bearer_token
+            if token is None or len(token.get_secret_value()) < 32:
+                raise ConfigError(
+                    "MCP_BEARER_TOKEN",
+                    "must have at least 32 characters when MCP_TRANSPORT is http",
+                )
+        return self
 
 
 def load_settings() -> Settings:
@@ -157,7 +232,10 @@ def load_settings() -> Settings:
     call, also when several variables are invalid. A :class:`ConfigError`
     raised by the ``MCP_BEARER_TOKEN`` rule propagates unchanged.
     """
-    raise NotImplementedError
+    try:
+        return Settings()
+    except ValidationError as error:
+        raise _config_error_from_validation(error) from None
 
 
 def load_settings_or_exit() -> Settings:
@@ -170,4 +248,8 @@ def load_settings_or_exit() -> Settings:
     code 2. Never raises :class:`ConfigError` and never opens a port, so it is
     safe to call first in the server entry point.
     """
-    raise NotImplementedError
+    try:
+        return load_settings()
+    except ConfigError as error:
+        print(str(error), file=sys.stderr)
+        raise SystemExit(2) from None
