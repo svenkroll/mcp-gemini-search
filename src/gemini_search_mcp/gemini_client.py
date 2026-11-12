@@ -38,16 +38,22 @@ real waiting are needed.
 
 import asyncio
 import logging
+import math
+import random
 import time
 from collections.abc import Awaitable, Callable
-from typing import Any, Protocol
+from datetime import UTC
+from email.utils import parsedate_to_datetime
+from typing import Any, Protocol, cast
 
-from google.genai import interactions
+from google import genai
+from google.genai import interactions, types
 from google.genai.errors import APIError
 
 from gemini_search_mcp.config import Settings
 from gemini_search_mcp.provider import (
     Citation,
+    ProviderError,
     Retrieval,
     RetrievalStatus,
     SearchResult,
@@ -227,7 +233,14 @@ class GeminiProvider:
 
         Never logs the query or the API key.
         """
-        raise NotImplementedError
+        response = await self._send(query, [dict(_SEARCH_TOOL)], None)
+        return SearchResult(
+            answer=self._answer_text(response),
+            citations=self._citations(response),
+            search_queries=self._search_queries(response),
+            usage=self._usage(response),
+            model=self._model,
+        )
 
     async def analyze_url(self, url: str, question: str) -> UrlAnalysisResult:
         """Answer a question about the content of one URL (ADR 0004).
@@ -266,7 +279,18 @@ class GeminiProvider:
 
         Never logs the URL, the question or the API key.
         """
-        raise NotImplementedError
+        request_input = f"{url}\n{question}"
+        response = await self._send(
+            request_input,
+            [dict(_URL_CONTEXT_TOOL)],
+            URL_CONTEXT_INSTRUCTION,
+        )
+        return UrlAnalysisResult(
+            answer=self._answer_text(response),
+            retrievals=self._retrievals(response),
+            usage=self._usage(response),
+            model=self._model,
+        )
 
     async def _send(
         self,
@@ -329,7 +353,77 @@ class GeminiProvider:
             asyncio.CancelledError: caller cancellation, propagated without
                 a retry and without a result (ADR 0007).
         """
-        raise NotImplementedError
+        deadline = self._now() + self._settings.gemini_timeout_seconds
+        remaining = deadline - self._now()
+        if remaining <= 0:
+            raise ProviderError("unavailable")
+
+        try:
+            await asyncio.wait_for(self._semaphore.acquire(), timeout=remaining)
+        except TimeoutError:
+            raise ProviderError("unavailable") from None
+
+        try:
+            client = self._interactions_client()
+            attempts = 1 + self._settings.gemini_max_retries
+            retry = 0
+            while True:
+                remaining = deadline - self._now()
+                if remaining <= 0:
+                    raise ProviderError("unavailable")
+                try:
+                    return await client.create(
+                        model=self._model,
+                        input=request_input,
+                        tools=tools,
+                        system_instruction=system_instruction,
+                        timeout=remaining,
+                    )
+                except asyncio.CancelledError:
+                    raise
+                except TimeoutError:
+                    raise ProviderError("unavailable") from None
+                except APIError as error:
+                    if error.code not in _RETRYABLE_STATUS_CODES:
+                        if 400 <= error.code < 500:
+                            raise ProviderError("rejected") from None
+                        raise ProviderError("internal") from None
+
+                    retry += 1
+                    if retry >= attempts:
+                        logger.warning(
+                            "gemini request failed: status=%s attempts=%d",
+                            error.code,
+                            retry,
+                        )
+                        raise ProviderError("unavailable") from None
+
+                    logger.warning(
+                        "gemini request failed: status=%s attempt=%d, retrying",
+                        error.code,
+                        retry,
+                    )
+                    retry_after = self._retry_after_seconds(error)
+                    if retry_after is not None:
+                        if retry_after > deadline - self._now():
+                            raise ProviderError("unavailable") from None
+                        delay = retry_after
+                    else:
+                        delay = min(
+                            self._backoff_seconds(retry),
+                            max(deadline - self._now(), 0.0),
+                        )
+                    await self._sleep(delay)
+                except Exception:
+                    raise ProviderError("internal") from None
+        finally:
+            self._semaphore.release()
+
+    def _interactions_client(self) -> InteractionsClient:
+        """Return the boundary client, building the production one lazily."""
+        if self._interactions is None:
+            self._interactions = self._default_interactions()
+        return self._interactions
 
     def _default_interactions(self) -> InteractionsClient:
         """Build the production boundary from the configured API key.
@@ -342,7 +436,14 @@ class GeminiProvider:
         the attempt counting of :meth:`_send` stays exact; the adapter owns
         retries, backoff and ``Retry-After``.
         """
-        raise NotImplementedError
+        http_options = types.HttpOptions(
+            retry_options=types.HttpRetryOptions(attempts=1),
+        )
+        client = genai.Client(
+            api_key=self._settings.gemini_api_key.get_secret_value(),
+            http_options=http_options,
+        )
+        return cast(InteractionsClient, client.aio.interactions)
 
     def _answer_text(self, response: interactions.Interaction) -> str:
         """Return the model output text of one interaction.
@@ -352,7 +453,14 @@ class GeminiProvider:
         without an added separator. Returns an empty string when the response
         contains no ``model_output`` step or no text block.
         """
-        raise NotImplementedError
+        parts: list[str] = []
+        for step in response.steps or []:
+            if not isinstance(step, interactions.ModelOutputStep):
+                continue
+            for content in step.content or []:
+                if isinstance(content, interactions.TextContent):
+                    parts.append(content.text)
+        return "".join(parts)
 
     def _citations(self, response: interactions.Interaction) -> list[Citation]:
         """Map all ``url_citation`` annotations of one interaction.
@@ -369,7 +477,25 @@ class GeminiProvider:
 
         Returns an empty list when the response has no grounding annotations.
         """
-        raise NotImplementedError
+        citations: list[Citation] = []
+        for step in response.steps or []:
+            if not isinstance(step, interactions.ModelOutputStep):
+                continue
+            for content in step.content or []:
+                if not isinstance(content, interactions.TextContent):
+                    continue
+                for annotation in content.annotations or []:
+                    if not isinstance(annotation, interactions.URLCitation):
+                        continue
+                    citations.append(
+                        Citation(
+                            url=annotation.url or "",
+                            title=annotation.title or "",
+                            start_index=annotation.start_index or 0,
+                            end_index=annotation.end_index or 0,
+                        )
+                    )
+        return citations
 
     def _search_queries(self, response: interactions.Interaction) -> list[str]:
         """Return the search queries the model executed.
@@ -378,7 +504,12 @@ class GeminiProvider:
         step order, unchanged. Returns an empty list when the response
         contains no ``google_search_call`` step or no queries.
         """
-        raise NotImplementedError
+        queries: list[str] = []
+        for step in response.steps or []:
+            if not isinstance(step, interactions.GoogleSearchCallStep):
+                continue
+            queries.extend(step.arguments.queries or [])
+        return queries
 
     def _retrievals(self, response: interactions.Interaction) -> list[Retrieval]:
         """Map all URL Context results of one interaction.
@@ -392,7 +523,18 @@ class GeminiProvider:
         Returns an empty list when the response contains no
         ``url_context_result`` step.
         """
-        raise NotImplementedError
+        retrievals: list[Retrieval] = []
+        for step in response.steps or []:
+            if not isinstance(step, interactions.URLContextResultStep):
+                continue
+            for result in step.result:
+                retrievals.append(
+                    Retrieval(
+                        url=result.url or "",
+                        status=self._retrieval_status(result.status or ""),
+                    )
+                )
+        return retrievals
 
     def _retrieval_status(self, status: str) -> RetrievalStatus:
         """Map one URL Context status to a :class:`Retrieval` status.
@@ -403,7 +545,11 @@ class GeminiProvider:
         value — ``error``, ``paywall`` or an unknown future status — maps to
         ``"failed"`` (ADR 0004, issue #4).
         """
-        raise NotImplementedError
+        if status == "success":
+            return "retrieved"
+        if status == "unsafe":
+            return "unsafe"
+        return "failed"
 
     def _usage(self, response: interactions.Interaction) -> Usage:
         """Build :class:`Usage` exclusively from the API usage metadata.
@@ -413,7 +559,13 @@ class GeminiProvider:
         value maps to ``None``. When the response carries no usage object at
         all, both are ``None``. No token figure is ever computed locally.
         """
-        raise NotImplementedError
+        usage = response.usage
+        if usage is None:
+            return Usage()
+        return Usage(
+            input_tokens=usage.total_input_tokens,
+            output_tokens=usage.total_output_tokens,
+        )
 
     def _retry_after_seconds(self, error: APIError) -> float | None:
         """Parse the ``Retry-After`` header of a failed attempt.
@@ -429,7 +581,32 @@ class GeminiProvider:
 
         Never logs the header value or any request detail.
         """
-        raise NotImplementedError
+        headers = getattr(error.response, "headers", None)
+        if headers is None:
+            return None
+        raw = headers.get("Retry-After")
+        if raw is None:
+            return None
+        value = raw.strip()
+        if not value:
+            return None
+
+        try:
+            seconds = float(value)
+        except ValueError:
+            try:
+                parsed = parsedate_to_datetime(value)
+            except TypeError, ValueError:
+                return None
+            if parsed is None:
+                return None
+            if parsed.tzinfo is None:
+                parsed = parsed.replace(tzinfo=UTC)
+            return max(0.0, parsed.timestamp() - time.time())
+
+        if not math.isfinite(seconds):
+            return None
+        return max(0.0, seconds)
 
     def _backoff_seconds(self, retry: int) -> float:
         """Return the exponential backoff with jitter for one retry.
@@ -440,4 +617,6 @@ class GeminiProvider:
         the requested wait only; :meth:`_send` caps it at the remaining
         budget.
         """
-        raise NotImplementedError
+        delay = _RETRY_BACKOFF_BASE_SECONDS * (2 ** (retry - 1))
+        # Jitter spreads retries; it is not a security decision (S311).
+        return delay + random.uniform(0.0, _RETRY_BACKOFF_BASE_SECONDS)  # noqa: S311
