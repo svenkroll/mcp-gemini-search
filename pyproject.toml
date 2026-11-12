@@ -12,7 +12,10 @@ classifiers = [
     "Programming Language :: Python :: 3 :: Only",
     "Programming Language :: Python :: 3.14",
 ]
-dependencies = []
+dependencies = [
+    "pydantic==2.14.3",
+    "pydantic-settings==2.16.2",
+]
 
 [build-system]
 requires = ["hatchling==1.33.0"]
