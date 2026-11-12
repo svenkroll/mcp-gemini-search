@@ -1,0 +1,11 @@
+id: analyze-url-html-003
+tool: analyze_url
+category: url_html
+input:
+  url: https://www.rfc-editor.org/rfc/rfc8446.html
+  question: Which cipher suite must a TLS-compliant application implement according to this document?
+expected: A TLS-compliant application must implement the TLS_AES_128_GCM_SHA256 cipher suite.
+allowed_sources:
+- rfc-editor.org
+ground_truth_date: 2026-11-12
+expected_outcome: answer

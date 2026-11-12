@@ -1,13 +1,10 @@
-# Draft example case for the category tech_docs (ADR 0005, issue #3).
-# The project owner replaces it with a real case.
 id: search-techdocs-001
 tool: search
 category: tech_docs
 input:
-  query: "According to the official Python documentation, what does the built-in function len() return?"
-expected: "len() returns the number of items of the object passed to it."
+  query: According to the Python 3.14 documentation of built-in functions, what does len() return?
+expected: len() returns the length (the number of items) of an object.
 allowed_sources:
-  - docs.python.org
-ground_truth_date: 2026-11-10
+- docs.python.org
+ground_truth_date: 2026-11-12
 expected_outcome: answer
-draft: true

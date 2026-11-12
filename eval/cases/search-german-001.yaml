@@ -1,14 +1,11 @@
-# Draft example case for the category german (ADR 0005, issue #3).
-# The project owner replaces it with a real case.
 id: search-german-001
 tool: search
 category: german
 input:
-  query: "Wie viele Bits hat eine IPv4-Adresse?"
-expected: "Eine IPv4-Adresse besteht aus 32 Bits."
+  query: Wie viele Bits umfasst eine IPv6-Adresse, und in welchem RFC ist die IPv6-Adressarchitektur festgelegt?
+expected: Eine IPv6-Adresse umfasst 128 Bits; die Adressarchitektur ist in RFC 4291 festgelegt.
 allowed_sources:
-  - rfc-editor.org
-  - ietf.org
-ground_truth_date: 2026-11-10
+- rfc-editor.org
+- ietf.org
+ground_truth_date: 2026-11-12
 expected_outcome: answer
-draft: true

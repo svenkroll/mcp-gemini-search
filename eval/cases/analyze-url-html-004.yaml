@@ -1,0 +1,11 @@
+id: analyze-url-html-004
+tool: analyze_url
+category: url_html
+input:
+  url: https://www.rfc-editor.org/rfc/rfc1035.html
+  question: Which DNSSEC signing algorithm does this document recommend?
+expected: The tool states that the document does not cover DNSSEC instead of answering from model knowledge.
+allowed_sources:
+- rfc-editor.org
+ground_truth_date: 2026-11-12
+expected_outcome: honest_unknown

@@ -1,15 +1,11 @@
-# Draft example case for the category url_html (ADR 0005, issue #3).
-# The project owner replaces it with a real case. The URL is an immutable
-# public document at the RFC Editor, as required by ADR 0005.
 id: analyze-url-html-001
 tool: analyze_url
 category: url_html
 input:
-  url: "https://www.rfc-editor.org/rfc/rfc1035.html"
-  question: "Which protocol does RFC 1035 specify?"
-expected: "RFC 1035 specifies the Internet's Domain Name System (DNS)."
+  url: https://www.rfc-editor.org/rfc/rfc1035.html
+  question: Which protocol does RFC 1035 specify?
+expected: RFC 1035 specifies the Internet's Domain Name System (DNS).
 allowed_sources:
-  - rfc-editor.org
-ground_truth_date: 2026-11-10
+- rfc-editor.org
+ground_truth_date: 2026-11-12
 expected_outcome: answer
-draft: true

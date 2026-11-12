@@ -67,8 +67,10 @@ Nothing is self-hosted (ADR 0005):
 
 - `url_html` and `url_pdf` use immutable public documents, preferably RFCs
   at the RFC Editor, which exist as HTML
-  (`https://www.rfc-editor.org/rfc/<number>.html`) and PDF
-  (`https://www.rfc-editor.org/rfc/pdfrfc/<number>.txt.pdf`).
+  (`https://www.rfc-editor.org/rfc/rfc<number>.html`) and, for RFCs
+  published in the XML v3 format (roughly RFC 8650 onward), as PDF
+  (`https://www.rfc-editor.org/rfc/rfc<number>.pdf`). Older RFCs have no
+  PDF at the RFC Editor; check that a URL returns 200 before using it.
 - `url_failure` uses non-existent paths on such stable hosts and the
   reserved `.invalid` domain (RFC 2606), which can never be retrieved.
   Expected outcome is `error:url_unreachable`.

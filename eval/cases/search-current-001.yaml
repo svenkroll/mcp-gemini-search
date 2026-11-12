@@ -1,14 +1,14 @@
-# Draft example case for the category current_fact (ADR 0005, issue #3).
-# The project owner replaces it with a real case and keeps the reference
-# date fresh: a current_fact older than 90 days produces a warning.
+# Next expected change: Python 3.16.0 final, planned for October 2027 (PEP 602 annual cadence).
+# Re-verify and update expected + ground_truth_date when the 90-day warning appears.
 id: search-current-001
 tool: search
 category: current_fact
 input:
-  query: "What is the latest stable Python release?"
-expected: "Python 3.14 is the latest stable Python release."
+  query: What is the latest feature release of Python?
+expected: Python 3.15, released on 9 October 2026, is the latest feature release of Python.
 allowed_sources:
-  - python.org
-ground_truth_date: 2026-11-10
+- python.org
+- docs.python.org
+- peps.python.org
+ground_truth_date: 2026-11-12
 expected_outcome: answer
-draft: true

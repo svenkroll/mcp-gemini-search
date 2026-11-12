@@ -1,0 +1,10 @@
+id: search-techdocs-003
+tool: search
+category: tech_docs
+input:
+  query: According to the PostgreSQL 18 documentation, on which TCP port does the server listen by default?
+expected: The PostgreSQL server listens on TCP port 5432 by default.
+allowed_sources:
+- postgresql.org
+ground_truth_date: 2026-11-12
+expected_outcome: answer

@@ -1,0 +1,11 @@
+id: analyze-url-pdf-002
+tool: analyze_url
+category: url_pdf
+input:
+  url: https://www.rfc-editor.org/rfc/rfc9293.pdf
+  question: How many bits long is the Sequence Number field in the TCP header?
+expected: The Sequence Number field in the TCP header is 32 bits long.
+allowed_sources:
+- rfc-editor.org
+ground_truth_date: 2026-11-12
+expected_outcome: answer

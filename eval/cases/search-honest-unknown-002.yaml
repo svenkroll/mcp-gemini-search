@@ -1,0 +1,10 @@
+id: search-honest-unknown-002
+tool: search
+category: honest_unknown
+input:
+  query: What will the ECB deposit facility rate be on 1 January 2028?
+expected: The tool states that the future rate is not known instead of presenting a prediction as fact.
+allowed_sources:
+- ecb.europa.eu
+ground_truth_date: 2026-11-12
+expected_outcome: honest_unknown

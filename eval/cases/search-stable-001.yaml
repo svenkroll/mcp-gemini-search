@@ -1,14 +1,11 @@
-# Draft example case for the category stable_fact (ADR 0005, issue #3).
-# The project owner replaces it with a real case.
 id: search-stable-001
 tool: search
 category: stable_fact
 input:
-  query: "In which year was RFC 1035 published?"
-expected: "RFC 1035 was published in November 1987."
+  query: In which year was RFC 1035 published?
+expected: RFC 1035 was published in November 1987.
 allowed_sources:
-  - rfc-editor.org
-  - ietf.org
-ground_truth_date: 2026-11-10
+- rfc-editor.org
+- ietf.org
+ground_truth_date: 2026-11-12
 expected_outcome: answer
-draft: true

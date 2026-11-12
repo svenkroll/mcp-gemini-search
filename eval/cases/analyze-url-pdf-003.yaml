@@ -1,0 +1,11 @@
+id: analyze-url-pdf-003
+tool: analyze_url
+category: url_pdf
+input:
+  url: https://www.rfc-editor.org/rfc/rfc9116.pdf
+  question: Which fields must always be present in a security.txt file?
+expected: The Contact and Expires fields must always be present in a security.txt file.
+allowed_sources:
+- rfc-editor.org
+ground_truth_date: 2026-11-12
+expected_outcome: answer
