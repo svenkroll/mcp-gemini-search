@@ -48,7 +48,7 @@ from typing import Any, Protocol, cast
 
 from google import genai
 from google.genai import interactions, types
-from google.genai.errors import APIError
+from google.genai.errors import APIError, ContinuationInterruptedError
 
 from gemini_search_mcp.config import Settings
 from gemini_search_mcp.provider import (
@@ -326,18 +326,20 @@ class GeminiProvider:
            never retried (issue #4).
         5. Wait between attempts:
            - with a parseable ``Retry-After`` on the failed response (decimal
-             seconds or HTTP-date per RFC 9110, relative to the injected
-             clock, clamped to ``>= 0``; see :meth:`_retry_after_seconds`),
-             wait exactly that many seconds when they fit into the remaining
-             budget; when they do not fit, make no further attempt and raise
-             ``ProviderError("unavailable")`` immediately, without sleeping
-             past the budget;
+             seconds or HTTP-date per RFC 9110, HTTP-dates evaluated against
+             wall-clock time and clamped to ``>= 0``; see
+             :meth:`_retry_after_seconds`), wait exactly that many seconds
+             when they fit into the remaining budget; when they do not fit,
+             make no further attempt and raise ``ProviderError("unavailable")``
+             immediately, without sleeping past the budget;
            - with a missing or unparseable ``Retry-After``, wait
              :meth:`_backoff_seconds` (exponential backoff with jitter),
              again capped at the remaining budget.
         6. Outcome mapping:
-           - budget exhausted, attempts exhausted after retryable errors, or
-             a ``Retry-After`` beyond the budget:
+           - budget exhausted, attempts exhausted after retryable errors, a
+             ``Retry-After`` beyond the budget, or the SDK's
+             ``ContinuationInterruptedError`` wrapping a ``TimeoutError``
+             (per-call timeout after continuation progress):
              ``ProviderError("unavailable")``;
            - a non-retryable :class:`APIError` with an HTTP ``code`` from 400
              to 499: ``ProviderError("rejected")``;
@@ -414,6 +416,10 @@ class GeminiProvider:
                             max(deadline - self._now(), 0.0),
                         )
                     await self._sleep(delay)
+                except ContinuationInterruptedError as error:
+                    if isinstance(error.__cause__, TimeoutError):
+                        raise ProviderError("unavailable") from None
+                    raise ProviderError("internal") from None
                 except Exception:
                     raise ProviderError("internal") from None
         finally:
@@ -571,8 +577,9 @@ class GeminiProvider:
         """Parse the ``Retry-After`` header of a failed attempt.
 
         Reads the ``Retry-After`` header of the failed attempt's HTTP response.
-        Accepts decimal seconds and an HTTP-date per RFC 9110, evaluated
-        relative to the injected clock; a date in the past clamps to ``0.0``.
+        Accepts decimal seconds and an HTTP-date per RFC 9110; HTTP-dates are
+        evaluated against wall-clock time and a date in the past clamps to
+        ``0.0``.
 
         Returns:
             The wait in seconds, or ``None`` when the header is missing or
