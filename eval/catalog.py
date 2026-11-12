@@ -13,13 +13,16 @@ there are no errors (warnings allowed), otherwise non-zero. Every finding
 names file, field and rule.
 """
 
-from collections.abc import Sequence
+import argparse
+from collections import Counter
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+import yaml
+from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, ValidationError
 
 CASES_DIR = Path(__file__).resolve().parent / "cases"
 """Directory holding the case files, one ``<id>.yaml`` file per case."""
@@ -169,6 +172,108 @@ whose ``input`` does not match its ``tool`` (for example an
 with the field ``input`` named."""
 
 
+_CASE_ADAPTER = TypeAdapter(Case)
+"""Validates one parsed YAML mapping against the :data:`Case` union."""
+
+_MAPPING_RULE = "must be a YAML mapping at the top level"
+"""Rule text for a case file whose YAML is not a mapping."""
+
+_CATEGORY_RULE = "must be one of " + ", ".join(MINIMUM_DISTRIBUTION)
+"""Rule text for an unknown category, listing every allowed category."""
+
+_INPUT_RULES: dict[str, str] = {
+    "search": "must contain exactly query for tool search",
+    "analyze_url": "must contain exactly url and question for tool analyze_url",
+}
+"""Rule text for an ``input`` that does not match the case's ``tool``."""
+
+
+def _rule_for(field: str, tool: str | None) -> str:
+    """Return the rule text for a model violation of ``field`` (issue #3)."""
+    if field.startswith("input."):
+        return "must not be empty"
+    if field == "input":
+        return _INPUT_RULES.get(tool, "must match the tool")
+    if field in {"id", "expected"}:
+        return "must not be empty"
+    if field == "tool":
+        return "must be search or analyze_url"
+    if field == "category":
+        return _CATEGORY_RULE
+    if field == "allowed_sources":
+        return "must be a non-empty list of domains"
+    if field == "ground_truth_date":
+        return "must be an ISO date"
+    if field == "expected_outcome":
+        return "must be answer, honest_unknown or error:<code> with a code from ADR 0007"
+    if field == "draft":
+        return "must be true or false"
+    return "must be an ADR 0005 field"
+
+
+def _finding_for(error: Mapping[str, Any], filename: str, tool: str | None) -> Finding:
+    """Turn one Pydantic error into a finding with a dotted field path.
+
+    Pydantic reports the union discriminator as the first location element
+    for errors inside a member model (for example
+    ``("search", "input", "url")``); the discriminator itself is reported
+    with an empty location.
+    """
+    parts = [str(part) for part in error["loc"]]
+    if error["type"] in {"union_tag_invalid", "union_tag_not_found"}:
+        field = "tool"
+    elif len(parts) >= 2:
+        path = parts[1:]
+        if path[0] == "input":
+            # A missing key, an extra key or a non-mapping ``input`` means the
+            # input does not match the tool; an invalid value names the field.
+            mismatch = len(path) == 1 or error["type"] in {"extra_forbidden", "missing"}
+            field = "input" if mismatch else f"input.{path[1]}"
+        else:
+            field = path[0]
+    elif parts and parts[0] in _INPUT_RULES:
+        field = "tool"
+    else:
+        field = "file"
+    return Finding("error", filename, field, _rule_for(field, tool))
+
+
+def _read_case(path: Path) -> tuple[list[Finding], Case | None, str | None]:
+    """Read and validate one case file.
+
+    Returns the model errors, the parsed case when valid, and the raw ``id``
+    when the file carries one. The raw ``id`` is returned even for an
+    otherwise invalid case so that uniqueness and file-name rules still
+    apply.
+    """
+    try:
+        data = yaml.safe_load(path.read_text(encoding="utf-8"))
+    except yaml.YAMLError:
+        return [Finding("error", path.name, "file", _MAPPING_RULE)], None, None
+    if not isinstance(data, dict):
+        return [Finding("error", path.name, "file", _MAPPING_RULE)], None, None
+    raw_id = data.get("id")
+    case_id = raw_id if isinstance(raw_id, str) and raw_id else None
+    raw_tool = data.get("tool")
+    tool = raw_tool if isinstance(raw_tool, str) and raw_tool in _INPUT_RULES else None
+    try:
+        case = _CASE_ADAPTER.validate_python(data)
+    except ValidationError as exc:
+        return [_finding_for(error, path.name, tool) for error in exc.errors()], None, case_id
+    return [], case, case_id
+
+
+def _deduplicate(findings: Sequence[Finding]) -> list[Finding]:
+    """Drop exact duplicate findings while preserving their order."""
+    seen: set[Finding] = set()
+    unique: list[Finding] = []
+    for finding in findings:
+        if finding not in seen:
+            seen.add(finding)
+            unique.append(finding)
+    return unique
+
+
 @dataclass(frozen=True, slots=True)
 class Finding:
     """One validation result line (issue #3).
@@ -288,7 +393,77 @@ def validate_catalog(
     Returns:
         All findings, errors and warnings; empty when the catalog is valid.
     """
-    raise NotImplementedError
+    reference = today if today is not None else date.today()
+    findings: list[Finding] = []
+    valid_cases: list[Case] = []
+    seen_ids: dict[str, str] = {}
+    entries = (
+        sorted(cases_dir.iterdir(), key=lambda entry: entry.name) if cases_dir.is_dir() else []
+    )
+    for entry in entries:
+        if not entry.is_file():
+            continue
+        name = entry.name
+        if not name.endswith(CASE_SUFFIX):
+            findings.append(Finding("error", name, "file name", f"must end with {CASE_SUFFIX}"))
+            continue
+        errors, case, case_id = _read_case(entry)
+        warnings: list[Finding] = []
+        if case_id is not None:
+            first_file = seen_ids.get(case_id)
+            if first_file is None:
+                seen_ids[case_id] = name
+            else:
+                errors.append(
+                    Finding(
+                        "error",
+                        name,
+                        "id",
+                        f"must be unique; also used in {first_file}",
+                    )
+                )
+            stem = name[: -len(CASE_SUFFIX)]
+            if case_id != stem:
+                errors.append(Finding("error", name, "id", f"must equal the file name {stem}"))
+        if case is not None:
+            valid_cases.append(case)
+            if (
+                case.category == "current_fact"
+                and (reference - case.ground_truth_date).days > STALE_DAYS
+            ):
+                warnings.append(
+                    Finding(
+                        "warning",
+                        name,
+                        "ground_truth_date",
+                        f"older than {STALE_DAYS} days for a current_fact; refresh the case",
+                    )
+                )
+            if strict and case.draft:
+                errors.append(
+                    Finding(
+                        "error",
+                        name,
+                        "draft",
+                        "drafts are not allowed in strict mode",
+                    )
+                )
+        findings.extend(errors)
+        findings.extend(warnings)
+    if strict:
+        counts = Counter(case.category for case in valid_cases)
+        for category, minimum in MINIMUM_DISTRIBUTION.items():
+            found = counts.get(category, 0)
+            if found < minimum:
+                findings.append(
+                    Finding(
+                        "error",
+                        "catalog",
+                        "category",
+                        f"{category}: at least {minimum} case(s) required, found {found}",
+                    )
+                )
+    return _deduplicate(findings)
 
 
 def load_catalog(cases_dir: Path = CASES_DIR) -> list[Case]:
@@ -313,7 +488,17 @@ def load_catalog(cases_dir: Path = CASES_DIR) -> list[Case]:
             the exception carries every error finding. Never raised for
             warnings or strict-only rules.
     """
-    raise NotImplementedError
+    errors = [finding for finding in validate_catalog(cases_dir) if finding.severity == "error"]
+    if errors:
+        raise CatalogError(errors)
+    cases: list[Case] = []
+    if not cases_dir.is_dir():
+        return cases
+    for entry in sorted(cases_dir.iterdir(), key=lambda item: item.name):
+        if entry.is_file() and entry.name.endswith(CASE_SUFFIX):
+            data = yaml.safe_load(entry.read_text(encoding="utf-8"))
+            cases.append(_CASE_ADAPTER.validate_python(data))
+    return cases
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -335,7 +520,19 @@ def main(argv: Sequence[str] | None = None) -> int:
         allowed), 1 otherwise. Invalid arguments terminate the process
         with exit code 2 via argparse.
     """
-    raise NotImplementedError
+    parser = argparse.ArgumentParser(
+        description="Validate the ground-truth catalog in eval/cases/ (ADR 0005)."
+    )
+    parser.add_argument(
+        "--strict",
+        action="store_true",
+        help="also reject drafts and enforce the minimum distribution per category",
+    )
+    args = parser.parse_args(argv)
+    findings = validate_catalog(strict=args.strict)
+    for finding in findings:
+        print(finding)
+    return 1 if any(finding.severity == "error" for finding in findings) else 0
 
 
 if __name__ == "__main__":
