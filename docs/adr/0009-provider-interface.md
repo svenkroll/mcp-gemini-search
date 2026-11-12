@@ -26,7 +26,7 @@ coupling tool logic to Gemini response types.
 
 | Module | Responsibility | may import |
 | --- | --- | --- |
-| `config` | settings per ADR 0010 | pydantic-settings |
+| `config` | settings per ADR 0010 | pydantic-settings, pydantic |
 | `provider` | interface and data objects below | standard library, pydantic |
 | `gemini_client` | Gemini adapter, implements `provider` | `provider`, `config`, google-genai |
 | `urlpolicy` | ADR 0008 | standard library, pydantic, httpx |
