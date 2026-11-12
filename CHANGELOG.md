@@ -32,3 +32,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   to commit SHAs.
 - #1: README, CONTRIBUTING, CHANGELOG, `.env.example`, `.gitignore`, and
   `docs/techdebt.md`.
+- #2: Environment-variable settings model per ADR 0010 with `ConfigError` and
+  exit code 2 startup behavior.
+- #2: Provider boundary, data objects and `FakeProvider` per ADR 0009.
+- #2: Dependencies `pydantic` and `pydantic-settings`, pinned exactly.
