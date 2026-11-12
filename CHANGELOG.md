@@ -36,3 +36,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   exit code 2 startup behavior.
 - #2: Provider boundary, data objects and `FakeProvider` per ADR 0009.
 - #2: Dependencies `pydantic` and `pydantic-settings`, pinned exactly.
+- #3: Ground-truth catalog format in `eval/cases/` with validator
+  `eval/catalog.py`, example cases per category and `make eval-validate`
+  (`STRICT=1` adds `--strict`).

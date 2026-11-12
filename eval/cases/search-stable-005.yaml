@@ -1,0 +1,11 @@
+id: search-stable-005
+tool: search
+category: stable_fact
+input:
+  query: Who proposed the World Wide Web, and in which year?
+expected: Tim Berners-Lee proposed the World Wide Web at CERN in 1989.
+allowed_sources:
+- w3.org
+- home.cern
+ground_truth_date: 2026-11-12
+expected_outcome: answer

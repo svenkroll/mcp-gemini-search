@@ -1,0 +1,13 @@
+# Next expected change: Unicode 19.0, expected September 2027 (annual September release).
+# Re-verify and update expected + ground_truth_date when the 90-day warning appears.
+id: search-current-005
+tool: search
+category: current_fact
+input:
+  query: What is the latest version of the Unicode Standard?
+expected: Unicode 18.0, released in September 2026, is the latest version of the Unicode Standard.
+allowed_sources:
+- unicode.org
+- blog.unicode.org
+ground_truth_date: 2026-11-12
+expected_outcome: answer

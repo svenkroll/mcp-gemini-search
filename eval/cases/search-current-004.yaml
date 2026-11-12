@@ -1,0 +1,14 @@
+# Next expected change: Java SE 29 LTS, planned for September 2027.
+# Re-verify and update expected + ground_truth_date when the 90-day warning appears.
+id: search-current-004
+tool: search
+category: current_fact
+input:
+  query: What is the latest long-term support (LTS) release of Java SE?
+expected: Java SE 25, released in September 2025, is the latest Java SE LTS release.
+allowed_sources:
+- oracle.com
+- openjdk.org
+- jdk.java.net
+ground_truth_date: 2026-11-12
+expected_outcome: answer

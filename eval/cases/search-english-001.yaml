@@ -1,0 +1,11 @@
+id: search-english-001
+tool: search
+category: english
+input:
+  query: According to RFC 1035, what is the maximum length of a single DNS label?
+expected: According to RFC 1035, a DNS label is limited to 63 octets.
+allowed_sources:
+- rfc-editor.org
+- ietf.org
+ground_truth_date: 2026-11-12
+expected_outcome: answer

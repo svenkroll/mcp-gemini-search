@@ -1,0 +1,11 @@
+id: search-stable-002
+tool: search
+category: stable_fact
+input:
+  query: What is the exact speed of light in vacuum in metres per second?
+expected: The speed of light in vacuum is exactly 299,792,458 metres per second.
+allowed_sources:
+- bipm.org
+- nist.gov
+ground_truth_date: 2026-11-12
+expected_outcome: answer

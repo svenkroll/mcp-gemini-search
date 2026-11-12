@@ -1,0 +1,10 @@
+id: search-techdocs-002
+tool: search
+category: tech_docs
+input:
+  query: According to the Kubernetes Pod lifecycle documentation, what is the default value of a Pod's restartPolicy field?
+expected: The default value of a Pod's restartPolicy field is Always.
+allowed_sources:
+- kubernetes.io
+ground_truth_date: 2026-11-12
+expected_outcome: answer

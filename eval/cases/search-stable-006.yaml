@@ -1,0 +1,11 @@
+id: search-stable-006
+tool: search
+category: stable_fact
+input:
+  query: Which chemical element has the atomic number 79?
+expected: Gold (Au) has the atomic number 79.
+allowed_sources:
+- pubchem.ncbi.nlm.nih.gov
+- nist.gov
+ground_truth_date: 2026-11-12
+expected_outcome: answer

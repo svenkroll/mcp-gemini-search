@@ -1,0 +1,10 @@
+id: search-stable-004
+tool: search
+category: stable_fact
+input:
+  query: When did Cyprus join the European Union?
+expected: Cyprus joined the European Union on 1 May 2004.
+allowed_sources:
+- european-union.europa.eu
+ground_truth_date: 2026-11-12
+expected_outcome: answer

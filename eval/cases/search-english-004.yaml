@@ -1,0 +1,10 @@
+id: search-english-004
+tool: search
+category: english
+input:
+  query: What does EPSS stand for, and which organization maintains it?
+expected: EPSS stands for Exploit Prediction Scoring System and is maintained by FIRST (Forum of Incident Response and Security Teams).
+allowed_sources:
+- first.org
+ground_truth_date: 2026-11-12
+expected_outcome: answer

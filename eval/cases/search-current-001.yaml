@@ -1,0 +1,14 @@
+# Next expected change: Python 3.16.0 final, planned for October 2027 (PEP 602 annual cadence).
+# Re-verify and update expected + ground_truth_date when the 90-day warning appears.
+id: search-current-001
+tool: search
+category: current_fact
+input:
+  query: What is the latest feature release of Python?
+expected: Python 3.15, released on 9 October 2026, is the latest feature release of Python.
+allowed_sources:
+- python.org
+- docs.python.org
+- peps.python.org
+ground_truth_date: 2026-11-12
+expected_outcome: answer

@@ -1,0 +1,11 @@
+id: analyze-url-pdf-001
+tool: analyze_url
+category: url_pdf
+input:
+  url: https://www.rfc-editor.org/rfc/rfc9110.pdf
+  question: What does the 404 (Not Found) status code indicate according to this document?
+expected: 404 indicates that the origin server did not find a current representation for the target resource or is not willing to disclose that one exists.
+allowed_sources:
+- rfc-editor.org
+ground_truth_date: 2026-11-12
+expected_outcome: answer

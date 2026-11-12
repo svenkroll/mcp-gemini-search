@@ -1,0 +1,11 @@
+id: analyze-url-failure-003
+tool: analyze_url
+category: url_failure
+input:
+  url: https://www.rfc-editor.org/rfc/rfc1035.pdf
+  question: Which protocol does RFC 1035 specify?
+expected: The tool reports an error because no PDF exists at this path and never presents model knowledge as page content.
+allowed_sources:
+- rfc-editor.org
+ground_truth_date: 2026-11-12
+expected_outcome: error:url_unreachable
