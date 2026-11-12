@@ -15,7 +15,13 @@ from typing import Any
 
 import pytest
 from google.genai import interactions
-from google.genai.errors import APIError, ClientError, ServerError
+from google.genai._interactions_continuation import ContinuationTimeoutError
+from google.genai.errors import (
+    APIError,
+    ClientError,
+    ContinuationInterruptedError,
+    ServerError,
+)
 
 from gemini_search_mcp.config import Settings
 from gemini_search_mcp.gemini_client import URL_CONTEXT_INSTRUCTION, GeminiProvider
@@ -308,6 +314,30 @@ def test_ac5_timeout_and_exhausted_retries_raise_unavailable() -> None:
         asyncio.run(provider.search("query"))
     assert exhausted.value.kind == "unavailable"
     assert len(fake.calls) == 3
+
+
+def test_f1_continuation_interrupted_by_timeout_maps_to_unavailable() -> None:
+    """F1: the SDK's continuation wrapper around a timeout maps to unavailable.
+
+    The SDK reports a per-call timeout after progress as
+    ``ContinuationInterruptedError`` with a ``TimeoutError`` subclass as its
+    ``__cause__`` (see ``google.genai._gaos.google_genai`` in the pinned SDK).
+    The adapter must treat that timeout like a plain ``TimeoutError`` and raise
+    ``ProviderError("unavailable")`` instead of falling through to "internal".
+    """
+    interrupted = ContinuationInterruptedError(
+        "Automatic continuation was interrupted after 1 completed hop(s)."
+    )
+    interrupted.__cause__ = ContinuationTimeoutError(
+        "interactions.create() timed out before automatic continuation finished"
+    )
+    provider, fake = _provider([interrupted])
+
+    with pytest.raises(ProviderError) as error:
+        asyncio.run(provider.search("query"))
+
+    assert error.value.kind == "unavailable"
+    assert len(fake.calls) == 1
 
 
 def test_ac6_more_calls_than_max_concurrency_wait() -> None:
