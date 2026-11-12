@@ -347,7 +347,8 @@ def validate_catalog(
     Errors (always):
         - A directory entry whose name does not end with ``.yaml`` (for
           example a ``.yml`` file): field ``file name``, rule
-          ``must end with .yaml``.
+          ``must end with .yaml``. Hidden files whose name starts with a
+          dot (``.DS_Store``, ``.gitkeep``, editor swap files) are ignored.
         - A file that is not a YAML mapping at the top level (empty file,
           invalid YAML, list or scalar): field ``file``, rule ``must be a
           YAML mapping at the top level``.
@@ -401,7 +402,7 @@ def validate_catalog(
         sorted(cases_dir.iterdir(), key=lambda entry: entry.name) if cases_dir.is_dir() else []
     )
     for entry in entries:
-        if not entry.is_file():
+        if not entry.is_file() or entry.name.startswith("."):
             continue
         name = entry.name
         if not name.endswith(CASE_SUFFIX):
@@ -495,7 +496,7 @@ def load_catalog(cases_dir: Path = CASES_DIR) -> list[Case]:
     if not cases_dir.is_dir():
         return cases
     for entry in sorted(cases_dir.iterdir(), key=lambda item: item.name):
-        if entry.is_file() and entry.name.endswith(CASE_SUFFIX):
+        if entry.is_file() and not entry.name.startswith(".") and entry.name.endswith(CASE_SUFFIX):
             data = yaml.safe_load(entry.read_text(encoding="utf-8"))
             cases.append(_CASE_ADAPTER.validate_python(data))
     return cases

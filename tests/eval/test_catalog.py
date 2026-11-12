@@ -334,3 +334,10 @@ def test_ec7_analyze_url_input_with_query_is_an_error(tmp_path: Path) -> None:
     ]
     assert matching, f"expected an input mismatch error for {filename}, got {errors}"
     assert matching[0].rule
+
+
+@pytest.mark.parametrize("name", [".DS_Store", ".gitkeep", "._search-stable-001.yaml"])
+def test_hidden_files_in_cases_dir_are_ignored(tmp_path: Path, name: str) -> None:
+    _write_raw(tmp_path, name, "not a case")
+
+    assert _validate(tmp_path) == []
