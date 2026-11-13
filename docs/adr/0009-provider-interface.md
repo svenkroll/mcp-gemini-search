@@ -51,7 +51,10 @@ Data objects (immutable dataclasses or Pydantic models):
 - `UrlAnalysisResult`: `answer: str`, `retrievals: list[Retrieval]`,
   `usage: Usage`, `model: str`
 - `ProviderError(Exception)`: `kind: Literal["unavailable", "rejected",
-  "internal"]`; `unavailable` after exhausted retries or timeout
+  "internal"]`; `unavailable` after exhausted retries, a timeout or a connection
+  failure; a failed automatic-continuation hop is classified by its cause like a
+  direct error, and a retryable cause is not retried because earlier hops are
+  already billed
 
 Gemini-specific SDK types, grounding steps and transport details stay inside the
 adapter. Tests use a `FakeProvider` with preset results and errors. The first
