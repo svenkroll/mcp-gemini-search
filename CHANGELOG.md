@@ -27,6 +27,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- #9: Bearer token access control for `/mcp` with `MCP_TRANSPORT=http`, through
+  FastMCP's `auth` mechanism and a constant-time token verifier. A missing or
+  wrong token is answered with HTTP 401 and `WWW-Authenticate: Bearer`; the
+  health endpoints stay open and stdio stays without authentication. README
+  describes passing the token in OpenHands.
 - #8: FastMCP server `gemini-search-mcp` with stdio and stateless Streamable
   HTTP (`/mcp`), `search` always and `analyze_url` only with
   `ANALYZE_URL_ENABLED=true`, tool annotations and titles, results and errors

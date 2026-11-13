@@ -16,6 +16,8 @@ the Origin guard and serving HTTP (ADR 0009). Tool behaviour stays in
 - writes exactly one ``tool_call`` JSON log line per tool call (ADR 0007);
 - builds the stateless Streamable HTTP app on :data:`MCP_PATH` with the health
   routes and the Origin guard (ADR 0002);
+- attaches bearer token access control for ``MCP_TRANSPORT=http`` through
+  FastMCP's ``auth`` mechanism with :class:`BearerTokenVerifier` (ADR 0008);
 - provides the console script ``gemini-search-mcp`` (:func:`main`).
 
 Logging goes to ``sys.stdout`` as ADR 0007 requires, also with the stdio
@@ -31,6 +33,7 @@ Streamable HTTP endpoint serves both generations.
 
 import asyncio
 import copy
+import hmac
 import json
 import logging
 import sys
@@ -45,9 +48,10 @@ from urllib.parse import urlsplit
 
 import uvicorn
 from fastmcp import FastMCP
+from fastmcp.server.auth import AccessToken, TokenVerifier
 from fastmcp.tools import Tool, ToolResult
 from fastmcp.tools.base import ToolAnnotations
-from pydantic import Field
+from pydantic import Field, SecretStr
 from pydantic.json_schema import SkipJsonSchema
 from starlette.applications import Starlette
 from starlette.middleware import Middleware
@@ -142,6 +146,86 @@ ANALYZE_URL_DESCRIPTION = (
 Contains no claim that the tool is cheaper and no recommendation to use it by
 default or in preference to the caller's own fetch.
 """
+
+BEARER_CLIENT_ID = "mcp-bearer-token"
+"""``client_id`` of the :class:`AccessToken` an accepted bearer token yields.
+
+FastMCP requires a client ID; the static token identifies no individual client.
+"""
+
+
+class BearerTokenVerifier(TokenVerifier):
+    """FastMCP token verifier for the static ``MCP_BEARER_TOKEN`` (ADR 0008).
+
+    Attached as FastMCP ``auth`` (see :func:`build_auth`), so FastMCP's own
+    bearer auth backend and ``RequireAuthMiddleware`` protect :data:`MCP_PATH`:
+    a request without ``Authorization: Bearer <token>`` (scheme compared
+    case-insensitively by FastMCP, so ``bearer <token>`` is accepted) or with
+    a token this verifier rejects is answered with HTTP 401 and a
+    ``WWW-Authenticate`` header starting with ``Bearer``. Routes added outside
+    the MCP endpoint, i.e. the health routes, are not protected. A later
+    switch to OAuth replaces only this verifier.
+
+    Not FastMCP's ``StaticTokenVerifier`` (development only). No base URL, no
+    required scopes and no routes: no Protected Resource Metadata is
+    advertised.
+
+    The expected token is held as ``SecretStr`` and never appears in
+    ``repr``, ``str``, exceptions or logs; neither does a presented token.
+    """
+
+    def __init__(self, token: SecretStr) -> None:
+        """Store the expected token.
+
+        Precondition: ``token`` is the validated ``Settings.mcp_bearer_token``
+        (at least 32 characters, ADR 0010).
+        """
+        super().__init__()
+        self._expected_token = token
+
+    async def verify_token(self, token: str) -> AccessToken | None:
+        """Check a presented bearer token against the expected token.
+
+        Args:
+            token: the credential exactly as FastMCP extracted it from the
+                ``Authorization`` header, i.e. everything after the 7
+                characters ``"Bearer "``, unstripped.
+
+        Returns:
+            An :class:`AccessToken` with ``token=token``,
+            ``client_id=BEARER_CLIENT_ID``, ``scopes=[]`` and no expiry when
+            ``token`` is exactly equal to the expected token; ``None``
+            otherwise, including for the empty string, a prefix of the
+            expected token, the expected token with an appended character and
+            the expected token with leading or trailing whitespace.
+
+        The comparison runs in constant time with respect to the content:
+        ``hmac.compare_digest`` on the UTF-8 encodings of both values (so
+        non-ASCII input is rejected, never raises). Never raises, never logs
+        the presented or the expected token.
+        """
+        presented = token.encode("utf-8", errors="surrogatepass")
+        expected = self._expected_token.get_secret_value().encode("utf-8", errors="surrogatepass")
+        if not hmac.compare_digest(presented, expected):
+            return None
+        return AccessToken(token=token, client_id=BEARER_CLIENT_ID, scopes=[])
+
+
+def build_auth(settings: Settings) -> BearerTokenVerifier | None:
+    """Return the FastMCP ``auth`` provider for ``settings`` (ADR 0008).
+
+    Returns a :class:`BearerTokenVerifier` for ``settings.mcp_bearer_token``
+    when ``settings.mcp_transport == "http"``; ``None`` for ``"stdio"``, which
+    has no HTTP authentication.
+
+    Precondition: ``settings`` passed validation, so with ``"http"`` the token
+    is set and has at least 32 characters. Never logs the token.
+    """
+    if settings.mcp_transport != "http":
+        return None
+    assert settings.mcp_bearer_token is not None
+    return BearerTokenVerifier(settings.mcp_bearer_token)
+
 
 TOOL_ANNOTATIONS = ToolAnnotations(
     read_only_hint=True,
@@ -460,6 +544,9 @@ def build_server(
 
     - name :data:`SERVER_NAME`, instructions :data:`SERVER_INSTRUCTIONS`,
       ``mask_error_details=True``;
+    - ``auth`` is :func:`build_auth` of ``settings``: a
+      :class:`BearerTokenVerifier` with ``MCP_TRANSPORT=http``, ``None`` with
+      ``stdio``; :func:`build_http_app` thereby protects :data:`MCP_PATH`;
     - ``search`` is always registered: :class:`ContractTool` with
       :data:`SEARCH_TITLE`, :data:`SEARCH_DESCRIPTION`,
       ``SEARCH_INPUT_SCHEMA``, ``SEARCH_OUTPUT_SCHEMA``,
@@ -478,6 +565,7 @@ def build_server(
         name=SERVER_NAME,
         instructions=SERVER_INSTRUCTIONS,
         mask_error_details=True,
+        auth=build_auth(settings),
     )
     server.add_tool(
         ContractTool(
@@ -609,7 +697,12 @@ def build_http_app(server: FastMCP) -> Starlette:
       serving revision 2026-07-28 and the older handshake revisions on the
       same endpoint;
     - :data:`HEALTH_LIVE_PATH` and :data:`HEALTH_READY_PATH` answer ``GET``
-      via :func:`health_live` and :func:`health_ready`;
+      via :func:`health_live` and :func:`health_ready`, with HTTP 200 also
+      when ``server.auth`` is set and the request carries no or a wrong
+      bearer token;
+    - when ``server.auth`` is set (see :func:`build_server`), FastMCP's auth
+      mechanism protects :data:`MCP_PATH` as described in
+      :class:`BearerTokenVerifier`; no own auth middleware is added;
     - FastMCP's Host/Origin guard is disabled
       (``host_origin_protection=False``) and :class:`OriginGuardMiddleware`
       wraps every route instead;
