@@ -42,11 +42,15 @@ grounding purposes; and because the adapter keeps the Interactions API default
 tier. Grounding is used only in the owner's personal workflow,
 not to build an index or for third parties.
 
-For Gemini 3 and later, paid usage includes 5,000 free search requests per
-month, shared across these models. After that, each further request costs
-14 USD per 1,000 requests; the default limit is 1,500 requests per project and
-day. A single user prompt can trigger several Google Search requests. Model
-token costs are separate.
+Costs on the paid tier have two parts: model tokens and Google Search
+requests. There is no free token allowance on the paid tier. For Gemini 3 and
+later, paid usage includes 5,000 free search requests per month, shared across
+these models. After that, each further request costs 14 USD per 1,000
+requests; the default limit is 1,500 requests per project and day. Search is
+billed per executed search query, not per prompt, so a single `search` call can
+consume several requests. URL Context has no fee of its own; the retrieved
+content is billed as input tokens. The current figures are listed under
+"Verified facts".
 
 The adapter deliberately keeps the Interactions API default `store=true` and
 never passes `store`. Google therefore retains every interaction (input, URL,
@@ -70,6 +74,21 @@ debugging versus retention only.
   retrieved URL. PDF is a supported content type.
 - Free tier: inputs and outputs may be used for product improvement; paid tier:
   not. Search Grounding still stores prompt, context and output for 30 days.
+- Pricing (as of 2026-11-13, Gemini Developer API pricing page, Standard,
+  paid tier, per 1M tokens): `gemini-3.8-flash` input 0.75 USD and output
+  including thinking tokens 3.75 USD through 2026-12-31; from 2027-01-01
+  input 1.50 USD and output 7.50 USD. Batch and Flex cost half, but the
+  adapter uses neither.
+- Google Search with Gemini 3 and later: each search query the model executes
+  is billed; empty queries are ignored. 5,000 free requests per month shared
+  across Gemini 3 and later models, then 14 USD per 1,000 requests. Default cap
+  1,500 requests per day and project on all paid tiers, resetting at midnight
+  Pacific Time; more can be requested in AI Studio.
+- URL Context: no fee of its own. The retrieved content is reported as
+  `tool_use_input_tokens` in the usage metadata and billed at the model's input
+  price, so `analyze_url` cost grows with page size.
+- Usage tier 1 (billing account linked, prepay of at least 5 USD) has a
+  billing tier cap of 250 USD.
 - Interactions API storage (as of 2026-11-13): `store=true` is the default;
   interactions are retained for 55 days on the paid tier and 1 day on the free
   tier. `store=false` opts out but is incompatible with background execution and
@@ -102,6 +121,14 @@ reported instead of guessed.
 The exact `google-genai` version is pinned in the lockfile. Price, quota and
 Google's terms are checked against the current primary source before release.
 
+Not stated in the pricing documentation and to be checked against the usage
+metadata of real calls:
+
+- whether search results retrieved by Google Search count as input tokens for
+  `gemini-3.8-flash`;
+- whether the 5,000 free search requests per month apply per project or per
+  billing account.
+
 ## More Information
 
 - [Gemini 3.8 Flash](https://ai.google.dev/gemini-api/docs/models/gemini-3.8-flash)
@@ -112,4 +139,5 @@ Google's terms are checked against the current primary source before release.
 - [Grounding with Google Search](https://ai.google.dev/gemini-api/docs/google-search)
 - [URL context](https://ai.google.dev/gemini-api/docs/url-context)
 - [Gemini API Pricing](https://ai.google.dev/gemini-api/docs/pricing)
+- [Rate limits and usage tiers](https://ai.google.dev/gemini-api/docs/rate-limits)
 - [Gemini API Terms](https://ai.google.dev/gemini-api/terms)
