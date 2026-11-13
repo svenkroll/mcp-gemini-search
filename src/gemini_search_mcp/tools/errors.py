@@ -29,9 +29,9 @@ The table is :data:`PROVIDER_ERROR_CODES` plus :func:`tool_error_from_exception`
 
 from collections.abc import Mapping
 from types import MappingProxyType
-from typing import Literal
+from typing import Literal, Self
 
-from gemini_search_mcp.provider import ProviderError, ProviderErrorKind
+from gemini_search_mcp.provider import ProviderError, ProviderErrorKind, Usage
 
 ErrorCode = Literal[
     "invalid_input",
@@ -108,6 +108,12 @@ class ToolError(Exception):
         code: the ADR 0007 error code.
         message: the client message; for every code except ``invalid_input``
             exactly ``ERROR_MESSAGES[code]``.
+        usage: token usage of the Gemini response that preceded the failure,
+            ``None`` when there was no response (input check or provider
+            error). Server-side only, for the ``tool_call`` log line; never
+            part of the client payload.
+        model: the model that response reported, ``None`` together with
+            :attr:`usage`.
 
     ``str(exc)`` equals :attr:`message`. Instances never hold input values or
     upstream details; chain the original exception with ``from`` instead.
@@ -119,6 +125,8 @@ class ToolError(Exception):
 
     code: ErrorCode
     message: str
+    usage: Usage | None = None
+    model: str | None = None
 
     def __init__(self, code: FixedMessageCode) -> None:
         message = ERROR_MESSAGES[code]
@@ -128,6 +136,17 @@ class ToolError(Exception):
 
     def __str__(self) -> str:
         return self.message
+
+    def with_response(self, usage: Usage, model: str) -> Self:
+        """Record the usage and model of the Gemini response behind this error.
+
+        For failures after a successful provider call (e.g. ``url_unreachable``),
+        so the ``tool_call`` line still reports the billed tokens. Returns
+        ``self``.
+        """
+        self.usage = usage
+        self.model = model
+        return self
 
     def to_payload(self, request_id: str) -> dict[str, dict[str, str]]:
         """Return the ADR 0007 error object for the tool result text content.

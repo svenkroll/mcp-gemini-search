@@ -383,7 +383,7 @@ E2E_IDS = [
     "search-honest-unknown-001",
     "search-stable-001",
 ]
-E2E_TOKEN_TOTALS = (180, 35)
+E2E_TOKEN_TOTALS = (181, 36)
 
 
 def _e2e_provider() -> FakeProvider:

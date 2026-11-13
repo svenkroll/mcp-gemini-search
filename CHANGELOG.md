@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- #31: The loggers of the HTTP client libraries and the Google GenAI SDK are
+  capped at `WARNING` independent of `LOG_LEVEL`, so request URLs (resolved
+  grounding redirects, Gemini requests) no longer appear in the log. The
+  `tool_call` line of a call that ends with `url_unreachable` or `url_unsafe`
+  after a Gemini response carries that response's token figures. ADR 0007
+  documents both.
 - #20: The Gemini adapter validates every citation against the UTF-8 bytes of
   the answer and drops citations with a missing or empty URL, a missing index,
   an empty or out-of-range segment or an index inside a multi-byte character;

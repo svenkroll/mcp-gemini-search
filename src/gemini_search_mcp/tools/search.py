@@ -29,7 +29,7 @@ from types import MappingProxyType
 from typing import Any, Protocol, Self, cast
 from urllib.parse import urlsplit
 
-from gemini_search_mcp.provider import Citation, SearchProvider, Usage
+from gemini_search_mcp.provider import Citation, SearchProvider, SearchResult, Usage
 from gemini_search_mcp.tools.errors import InvalidInputError, tool_error_from_exception
 from gemini_search_mcp.urlpolicy import (
     REDIRECT_ALLOWLIST,
@@ -327,10 +327,13 @@ async def run_search(
             ``ProviderError`` ``unavailable`` -> ``upstream_unavailable``,
             ``rejected`` -> ``upstream_error``, ``internal`` ->
             ``internal_error``; anything else -> ``internal_error``. The
-            original exception is only available as ``__cause__``.
+            original exception is only available as ``__cause__``. A failure after
+    the provider returned a result carries that result's usage and model on the
+    error (:meth:`ToolError.with_response`).
 
     Cancellation (``asyncio.CancelledError``) propagates unmapped.
     """
+    result: SearchResult | None = None
     try:
         result = await provider.search(tool_input.query)
         sources = await build_sources(
@@ -340,7 +343,10 @@ async def run_search(
             resolver=resolver,
         )
     except Exception as error:
-        raise tool_error_from_exception(error) from error
+        mapped = tool_error_from_exception(error)
+        if result is not None:
+            mapped.with_response(result.usage, result.model)
+        raise mapped from error
     return SearchToolResult(
         output=SearchOutput(
             answer=result.answer,
