@@ -8,8 +8,10 @@ waiting. Fixtures contain no real responses, API keys or user data.
 """
 
 import asyncio
+import email.utils
 import json
 import logging
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -121,6 +123,7 @@ def _provider(
     outcomes: list[Any],
     *,
     sleeper: _Sleeper | None = None,
+    wall_clock: Any = None,
     **settings_overrides: Any,
 ) -> tuple[GeminiProvider, _FakeInteractions]:
     """Build the adapter with a fake client and a recording sleeper."""
@@ -129,6 +132,7 @@ def _provider(
         _settings(**settings_overrides),
         fake,
         sleep=sleeper or _Sleeper(),
+        wall_clock=wall_clock,
     )
     return provider, fake
 
@@ -492,7 +496,11 @@ def test_ec6_missing_or_unparseable_retry_after_uses_backoff_with_jitter() -> No
     """EC6: without a usable Retry-After the exponential backoff with jitter runs."""
     response = _load_fixture("search_no_grounding.json")
 
-    for headers in (None, {"Retry-After": "not-a-number"}):
+    for headers in (
+        None,
+        {"Retry-After": "not-a-number"},
+        {"Retry-After": "Not, 99 Foo 9999 99:99:99 GMT"},
+    ):
         sleeper = _Sleeper()
         provider, fake = _provider([_api_error(429, headers), response], sleeper=sleeper)
 
@@ -502,6 +510,80 @@ def test_ec6_missing_or_unparseable_retry_after_uses_backoff_with_jitter() -> No
         assert len(fake.calls) == 2
         assert len(sleeper.delays) == 1
         assert 1.0 <= sleeper.delays[0] < 2.0
+
+
+# 2026-11-13 12:00:00 UTC as seconds since the epoch, used as the injected wall clock.
+_WALL_NOW = 1_794_571_200.0
+
+
+def _http_date(epoch: float) -> str:
+    return email.utils.formatdate(epoch, usegmt=True)
+
+
+def test_retry_after_http_date_in_the_future_waits_until_that_date() -> None:
+    """A Retry-After HTTP-date 2 seconds after the wall clock waits exactly 2.0 seconds."""
+    response = _load_fixture("search_no_grounding.json")
+    sleeper = _Sleeper()
+    provider, fake = _provider(
+        [_api_error(429, {"Retry-After": _http_date(_WALL_NOW + 2)}), response],
+        sleeper=sleeper,
+        wall_clock=lambda: _WALL_NOW,
+    )
+
+    assert asyncio.run(provider.search("query")).answer == "Only an answer."
+    assert len(fake.calls) == 2
+    assert sleeper.delays == [pytest.approx(2.0)]
+
+
+def test_retry_after_http_date_in_the_past_waits_zero_seconds() -> None:
+    """A Retry-After HTTP-date before the wall clock clamps to a zero wait."""
+    response = _load_fixture("search_no_grounding.json")
+    sleeper = _Sleeper()
+    provider, fake = _provider(
+        [_api_error(429, {"Retry-After": _http_date(_WALL_NOW - 60)}), response],
+        sleeper=sleeper,
+        wall_clock=lambda: _WALL_NOW,
+    )
+
+    assert asyncio.run(provider.search("query")).answer == "Only an answer."
+    assert len(fake.calls) == 2
+    assert sleeper.delays == [0.0]
+
+
+def test_retry_after_http_date_beyond_budget_raises_unavailable_without_sleeping() -> None:
+    """A Retry-After HTTP-date beyond the remaining budget ends the call at once."""
+    response = _load_fixture("search_no_grounding.json")
+    sleeper = _Sleeper()
+    provider, fake = _provider(
+        [_api_error(429, {"Retry-After": _http_date(_WALL_NOW + 3600)}), response],
+        sleeper=sleeper,
+        wall_clock=lambda: _WALL_NOW,
+    )
+
+    with pytest.raises(ProviderError) as raised:
+        asyncio.run(provider.search("query"))
+
+    assert raised.value.kind == "unavailable"
+    assert len(fake.calls) == 1
+    assert sleeper.delays == []
+
+
+def test_retry_after_http_date_without_time_zone_is_read_as_utc() -> None:
+    """A date with a numeric zone offset of zero and a naive date evaluate the same."""
+    response = _load_fixture("search_no_grounding.json")
+    sleeper = _Sleeper()
+    naive = email.utils.format_datetime(
+        datetime.fromtimestamp(_WALL_NOW + 5, UTC).replace(tzinfo=None)
+    )
+    provider, _ = _provider(
+        [_api_error(429, {"Retry-After": naive}), response],
+        sleeper=sleeper,
+        wall_clock=lambda: _WALL_NOW,
+    )
+
+    asyncio.run(provider.search("query"))
+
+    assert sleeper.delays == [pytest.approx(5.0)]
 
 
 def test_api_version_is_pinned_in_http_options(monkeypatch: pytest.MonkeyPatch) -> None:

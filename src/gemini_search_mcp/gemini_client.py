@@ -118,6 +118,10 @@ Sleep = Callable[[float], Awaitable[None]]
 Clock = Callable[[], float]
 """Monotonic replacement for ``time.monotonic``; injectable so tests own the budget."""
 
+WallClock = Callable[[], float]
+"""Replacement for ``time.time`` (seconds since the epoch); injectable so tests own
+the evaluation of HTTP-date ``Retry-After`` values."""
+
 
 class InteractionsClient(Protocol):
     """System boundary to the asynchronous Gemini interactions API.
@@ -182,6 +186,7 @@ class GeminiProvider:
         interactions_client: InteractionsClient | None = None,
         sleep: Sleep | None = None,
         now: Clock | None = None,
+        wall_clock: WallClock | None = None,
     ) -> None:
         """Store the settings and the injectable boundaries.
 
@@ -195,8 +200,11 @@ class GeminiProvider:
                 :meth:`_default_interactions`). Tests inject a fake.
             sleep: awaitable sleep used for backoff and ``Retry-After`` waits;
                 defaults to ``asyncio.sleep``.
-            now: monotonic clock used for the total budget and HTTP-date
-                ``Retry-After`` values; defaults to ``time.monotonic``.
+            now: monotonic clock used for the total budget only; defaults to
+                ``time.monotonic``.
+            wall_clock: wall-clock source (seconds since the epoch) used only
+                to evaluate HTTP-date ``Retry-After`` values; defaults to
+                ``time.time``.
 
         Postcondition: no network connection is opened and no SDK client is
         built during construction; the real client is created lazily on the
@@ -209,6 +217,7 @@ class GeminiProvider:
         self._genai_client: genai.Client | None = None
         self._sleep: Sleep = sleep or asyncio.sleep
         self._now: Clock = now or time.monotonic
+        self._wall_clock: WallClock = wall_clock or time.time
         self._semaphore = asyncio.Semaphore(settings.gemini_max_concurrency)
 
     async def search(self, query: str) -> SearchResult:
@@ -609,8 +618,8 @@ class GeminiProvider:
 
         Reads the ``Retry-After`` header of the failed attempt's HTTP response.
         Accepts decimal seconds and an HTTP-date per RFC 9110; HTTP-dates are
-        evaluated against wall-clock time and a date in the past clamps to
-        ``0.0``.
+        evaluated against the injected wall clock (``wall_clock``) and a date in
+        the past clamps to ``0.0``; a date without time zone is read as UTC.
 
         Returns:
             The wait in seconds, or ``None`` when the header is missing or
@@ -640,7 +649,7 @@ class GeminiProvider:
                 return None
             if parsed.tzinfo is None:
                 parsed = parsed.replace(tzinfo=UTC)
-            return max(0.0, parsed.timestamp() - time.time())
+            return max(0.0, parsed.timestamp() - self._wall_clock())
 
         if not math.isfinite(seconds):
             return None
