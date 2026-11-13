@@ -33,6 +33,7 @@ Streamable HTTP endpoint serves both generations.
 
 import asyncio
 import copy
+import hmac
 import json
 import logging
 import sys
@@ -203,7 +204,11 @@ class BearerTokenVerifier(TokenVerifier):
         non-ASCII input is rejected, never raises). Never raises, never logs
         the presented or the expected token.
         """
-        raise NotImplementedError
+        presented = token.encode("utf-8", errors="surrogatepass")
+        expected = self._expected_token.get_secret_value().encode("utf-8", errors="surrogatepass")
+        if not hmac.compare_digest(presented, expected):
+            return None
+        return AccessToken(token=token, client_id=BEARER_CLIENT_ID, scopes=[])
 
 
 def build_auth(settings: Settings) -> BearerTokenVerifier | None:
@@ -216,7 +221,10 @@ def build_auth(settings: Settings) -> BearerTokenVerifier | None:
     Precondition: ``settings`` passed validation, so with ``"http"`` the token
     is set and has at least 32 characters. Never logs the token.
     """
-    raise NotImplementedError
+    if settings.mcp_transport != "http":
+        return None
+    assert settings.mcp_bearer_token is not None
+    return BearerTokenVerifier(settings.mcp_bearer_token)
 
 
 TOOL_ANNOTATIONS = ToolAnnotations(
@@ -557,6 +565,7 @@ def build_server(
         name=SERVER_NAME,
         instructions=SERVER_INSTRUCTIONS,
         mask_error_details=True,
+        auth=build_auth(settings),
     )
     server.add_tool(
         ContractTool(

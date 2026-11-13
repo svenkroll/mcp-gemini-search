@@ -9,8 +9,8 @@ response for calling LLMs.
 
 - Tooling: `uv`, Ruff, `ty`, pytest with coverage, pre-commit, GitHub Actions.
 - The MCP server (`search`, optional `analyze_url`) runs over stdio and
-  stateless Streamable HTTP. Bearer token enforcement for HTTP and the
-  container image are not part of the server yet.
+  stateless Streamable HTTP. HTTP requests to `/mcp` require the static bearer
+  token. The container image is not part of the server yet.
 - Open tasks and deliberate debt are tracked in [`docs/techdebt.md`](docs/techdebt.md).
 
 ## Prerequisites
@@ -89,9 +89,12 @@ export MCP_BEARER_TOKEN=<at least 32 characters>
 uv run gemini-search-mcp
 ```
 
-The token must be configured, but the server does not check it on requests yet
-(bearer authentication is a separate issue); do not expose the port publicly
-until it does.
+Every request to `/mcp` must carry `Authorization: Bearer <MCP_BEARER_TOKEN>`
+([ADR 0008](docs/adr/0008-security.md)). The scheme is matched case-insensitively;
+the token must match exactly, without surrounding whitespace. A missing or wrong
+token is answered with HTTP 401 and `WWW-Authenticate: Bearer`, without further
+details. `/health/live` and `/health/ready` need no token. stdio has no
+authentication. The token and the `Authorization` header are never logged.
 
 The MCP endpoint is `http://<MCP_HOST>:<MCP_PORT>/mcp`. It is stateless and
 serves MCP revision 2026-07-28 and older revisions on the same endpoint.
@@ -99,6 +102,18 @@ serves MCP revision 2026-07-28 and older revisions on the same endpoint.
 never calls Gemini. A request with an `Origin` header that does not equal the
 scheme, host and port the server is reached at (including `null`) is answered
 with HTTP 403; requests without `Origin` are processed.
+
+#### Passing the token in OpenHands
+
+In OpenHands, add the server as a Streamable HTTP (`shttp`) MCP server with the
+URL `https://<your host>/mcp` and enter the token in the field "Bearer token".
+In a configuration file or on the command line, pass it as a header instead:
+
+```bash
+openhands mcp add gemini-search --transport http \
+  --header "Authorization: Bearer <MCP_BEARER_TOKEN>" \
+  https://<your host>/mcp
+```
 
 ### Logging
 
