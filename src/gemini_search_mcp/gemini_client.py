@@ -32,6 +32,10 @@ ADR 0006:
   (``Interaction.usage`` with ``total_input_tokens`` and
   ``total_output_tokens``).
 
+The adapter deliberately does not set ``store``, so the Interactions API default
+``store=true`` applies and Google retains every interaction. This is a
+documented decision in ADR 0006; do not "fix" it without a superseding ADR.
+
 The adapter never logs the API key, a query, a question or a URL (ADR 0007,
 issue #4). Unit tests run offline: they inject a fake :class:`InteractionsClient`
 plus fake ``sleep`` and clock functions, so no network, no real API key and no

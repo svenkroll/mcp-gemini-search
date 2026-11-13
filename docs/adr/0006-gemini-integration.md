@@ -37,7 +37,9 @@ active billing. Free usage is meant only for direct AI Studio experiments, not
 for the operated Search Grounding service. The README explains: free services
 may use content for product improvement, paid ones do not; with Search
 Grounding, Google still stores prompt, context and output for 30 days for
-grounding purposes. Grounding is used only in the owner's personal workflow,
+grounding purposes; and because the adapter keeps the Interactions API default
+`store=true`, Google also retains every interaction for 55 days on the paid
+tier. Grounding is used only in the owner's personal workflow,
 not to build an index or for third parties.
 
 For Gemini 3 and later, paid usage includes 5,000 free search requests per
@@ -45,6 +47,16 @@ month, shared across these models. After that, each further request costs
 14 USD per 1,000 requests; the default limit is 1,500 requests per project and
 day. A single user prompt can trigger several Google Search requests. Model
 token costs are separate.
+
+The adapter deliberately keeps the Interactions API default `store=true` and
+never passes `store`. Google therefore retains every interaction (input, URL,
+question, system instruction and output) for 55 days on the paid tier, in
+addition to the 30-day Search Grounding storage. This is accepted for the
+owner's personal workflow and keeps interactions visible in AI Studio for
+debugging. `store=false` is not used because it removes that visibility, and
+the adapter needs none of the stateful features it would also disable
+(`previous_interaction_id`, background execution), so the decision is about
+debugging versus retention only.
 
 ### Verified facts (as of 2026-11-09)
 
@@ -58,6 +70,11 @@ token costs are separate.
   retrieved URL. PDF is a supported content type.
 - Free tier: inputs and outputs may be used for product improvement; paid tier:
   not. Search Grounding still stores prompt, context and output for 30 days.
+- Interactions API storage (as of 2026-11-13): `store=true` is the default;
+  interactions are retained for 55 days on the paid tier and 1 day on the free
+  tier. `store=false` opts out but is incompatible with background execution and
+  `previous_interaction_id`. Source: Interactions API overview, section "Data
+  storage and retention".
 - API version (as of 2026-11-13): `v1`. Verified against the `google-genai`
   3.3.0 source (`GOOGLE_AI_API_DEFAULT_VERSION = 'v1'` in `_api_client.py`,
   environment override `GOOGLE_GENAI_API_VERSION`, interactions route
@@ -77,6 +94,8 @@ reported instead of guessed.
 - Good: Switching models stays a configuration decision.
 - Bad: An API key and current pricing terms remain operating prerequisites.
 - Bad: Grounding cost depends on the tier and on individual search requests.
+- Bad: every request, including URLs and questions, is retained by Google for
+  55 days on the paid tier.
 
 ## Open
 
@@ -89,6 +108,7 @@ Google's terms are checked against the current primary source before release.
 - [Google Gen AI SDK](https://googleapis.github.io/python-genai/)
 - [API versions explained](https://ai.google.dev/gemini-api/docs/api-versions)
 - [Interactions API reference, v1](https://ai.google.dev/api/interactions-api-v1)
+- [Interactions API overview, data storage and retention](https://ai.google.dev/gemini-api/docs/interactions/interactions-overview#data-storage-retention)
 - [Grounding with Google Search](https://ai.google.dev/gemini-api/docs/google-search)
 - [URL context](https://ai.google.dev/gemini-api/docs/url-context)
 - [Gemini API Pricing](https://ai.google.dev/gemini-api/docs/pricing)
