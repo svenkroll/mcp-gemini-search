@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- #20: The Gemini adapter validates every citation against the UTF-8 bytes of
+  the answer and drops citations with a missing or empty URL, a missing index,
+  an empty or out-of-range segment or an index inside a multi-byte character;
+  drops are counted per reason in a debug log record without content. ADR 0003
+  records the offset base for several text blocks as undecidable (probe of
+  #29); no offset correction is applied.
+
 ### Changed
 
 - `analyze_url` becomes optional: `search` is the core tool, ADR 0004 defines

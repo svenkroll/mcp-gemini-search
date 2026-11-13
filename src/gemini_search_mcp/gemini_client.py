@@ -21,6 +21,12 @@ ADR 0006:
   Indices are therefore copied into
   :class:`gemini_search_mcp.provider.Citation` unchanged and address the
   UTF-8 byte positions of the answer (issue #4).
+- Citations are validated against the UTF-8 bytes of the answer before they
+  leave the adapter; malformed ones are dropped and counted (issue #20,
+  :meth:`GeminiProvider._citations`). The offset base for answers with several
+  text blocks is undecidable (probe of issue #29, ADR 0003), so indices are
+  never shifted by a block offset; the adapter only logs numbers when a later
+  block carries annotations.
 - The executed search queries arrive as ``google_search_call`` steps
   (``GoogleSearchCallStep.arguments.queries``).
 - ``google_search_result`` steps carry suggestions
@@ -36,10 +42,10 @@ The adapter deliberately does not set ``store``, so the Interactions API default
 ``store=true`` applies and Google retains every interaction. This is a
 documented decision in ADR 0006; do not "fix" it without a superseding ADR.
 
-The adapter never logs the API key, a query, a question or a URL (ADR 0007,
-issue #4). Unit tests run offline: they inject a fake :class:`InteractionsClient`
-plus fake ``sleep`` and clock functions, so no network, no real API key and no
-real waiting are needed.
+The adapter never logs the API key, a query, a question, a URL, a title or
+answer text (ADR 0007, issue #4, issue #20). Unit tests run offline: they
+inject a fake :class:`InteractionsClient` plus fake ``sleep`` and clock
+functions, so no network, no real API key and no real waiting are needed.
 """
 
 import asyncio
@@ -244,11 +250,12 @@ class GeminiProvider:
             - ``answer``: the model output text, unchanged (the ``text`` of the
               ``TextContent`` blocks of all ``model_output`` steps, in step
               and content order, concatenated without an added separator);
-            - ``citations``: every ``URLCitation`` annotation of those text
-              blocks in order of appearance, mapped to
+            - ``citations``: every valid ``URLCitation`` annotation of those
+              text blocks in order of appearance, mapped to
               :class:`Citation` with ``url``, ``title`` (empty string when the
               annotation has no title), ``start_index`` and ``end_index``
               copied unchanged in their documented unit, UTF-8 bytes;
+              malformed annotations are dropped (see :meth:`_citations`);
             - ``search_queries``: the executed queries from all
               ``google_search_call`` steps (``arguments.queries``) in step
               order;
@@ -523,6 +530,18 @@ class GeminiProvider:
         self._genai_client = client
         return cast(InteractionsClient, client.aio.interactions)
 
+    @staticmethod
+    def _text_blocks(response: interactions.Interaction) -> list[interactions.TextContent]:
+        """Return the ``TextContent`` blocks of all ``model_output`` steps in order."""
+        blocks: list[interactions.TextContent] = []
+        for step in response.steps or []:
+            if not isinstance(step, interactions.ModelOutputStep):
+                continue
+            for content in step.content or []:
+                if isinstance(content, interactions.TextContent):
+                    blocks.append(content)
+        return blocks
+
     def _answer_text(self, response: interactions.Interaction) -> str:
         """Return the model output text of one interaction.
 
@@ -531,49 +550,111 @@ class GeminiProvider:
         without an added separator. Returns an empty string when the response
         contains no ``model_output`` step or no text block.
         """
-        parts: list[str] = []
-        for step in response.steps or []:
-            if not isinstance(step, interactions.ModelOutputStep):
-                continue
-            for content in step.content or []:
-                if isinstance(content, interactions.TextContent):
-                    parts.append(content.text)
-        return "".join(parts)
+        return "".join(block.text for block in self._text_blocks(response))
 
     def _citations(self, response: interactions.Interaction) -> list[Citation]:
-        """Map all ``url_citation`` annotations of one interaction.
+        """Validate and map the ``url_citation`` annotations of one interaction.
 
         Every ``URLCitation`` annotation of the text blocks of all
-        ``model_output`` steps, in order of appearance, becomes one
-        :class:`Citation` with:
+        ``model_output`` steps, in order of appearance, is checked against the
+        UTF-8 bytes of the answer exactly as :meth:`_answer_text` returns it.
+        A valid annotation becomes one :class:`Citation` with:
 
         - ``url``: the annotation URL;
-        - ``title``: the annotation title, an empty string when it has none;
+        - ``title``: the annotation title, an empty string when it has none (a
+          missing title is not a drop reason);
         - ``start_index`` and ``end_index``: copied unchanged; their unit is
           UTF-8 bytes (see the module docstring), ``start_index`` inclusive,
           ``end_index`` exclusive.
 
-        Returns an empty list when the response has no grounding annotations.
+        An annotation is dropped when
+
+        - its URL is missing or empty;
+        - ``start_index`` or ``end_index`` is missing;
+        - ``0 <= start_index < end_index <= len(answer_bytes)`` does not hold
+          (an empty segment is no evidence);
+        - the byte slice does not decode as strict UTF-8, that is, an index
+          lies inside a multi-byte character.
+
+        The order of the kept citations is unchanged. No offset correction is
+        applied: the offset base for several text blocks is undecidable
+        (issue #29, ADR 0003). When at least one citation was dropped, one
+        debug record per interaction carries the count per drop reason; when
+        a block with a byte offset greater than 0 carries annotations, one
+        debug record carries the number of blocks and, per such block, its
+        offset, length, smallest start and largest end. Both records contain
+        numbers only: no URL, title, answer text or query.
+
+        Returns an empty list when the response has no valid grounding
+        annotations.
         """
+        blocks = self._text_blocks(response)
+        answer_bytes = "".join(block.text for block in blocks).encode("utf-8", "surrogatepass")
         citations: list[Citation] = []
-        for step in response.steps or []:
-            if not isinstance(step, interactions.ModelOutputStep):
-                continue
-            for content in step.content or []:
-                if not isinstance(content, interactions.TextContent):
+        dropped = {"missing_url": 0, "missing_index": 0, "out_of_range": 0, "invalid_utf8": 0}
+        later_blocks: list[str] = []
+        block_offset = 0
+        for block in blocks:
+            block_length = len(block.text.encode("utf-8", "surrogatepass"))
+            starts: list[int] = []
+            ends: list[int] = []
+            for annotation in block.annotations or []:
+                if not isinstance(annotation, interactions.URLCitation):
                     continue
-                for annotation in content.annotations or []:
-                    if not isinstance(annotation, interactions.URLCitation):
-                        continue
+                start, end = annotation.start_index, annotation.end_index
+                if start is not None:
+                    starts.append(start)
+                if end is not None:
+                    ends.append(end)
+                if not annotation.url:
+                    dropped["missing_url"] += 1
+                elif start is None or end is None:
+                    dropped["missing_index"] += 1
+                elif not 0 <= start < end <= len(answer_bytes):
+                    dropped["out_of_range"] += 1
+                elif not self._decodes(answer_bytes[start:end]):
+                    dropped["invalid_utf8"] += 1
+                else:
                     citations.append(
                         Citation(
-                            url=annotation.url or "",
+                            url=annotation.url,
                             title=annotation.title or "",
-                            start_index=annotation.start_index or 0,
-                            end_index=annotation.end_index or 0,
+                            start_index=start,
+                            end_index=end,
                         )
                     )
+            if block_offset > 0 and (starts or ends):
+                later_blocks.append(
+                    f"offset={block_offset} length={block_length} "
+                    f"min_start={min(starts, default='none')} max_end={max(ends, default='none')}"
+                )
+            block_offset += block_length
+
+        if later_blocks:
+            logger.debug(
+                "citation offset base undecidable: blocks=%d; later annotated blocks: %s",
+                len(blocks),
+                "; ".join(later_blocks),
+            )
+        if any(dropped.values()):
+            logger.debug(
+                "dropped malformed citations: missing_url=%d missing_index=%d "
+                "out_of_range=%d invalid_utf8=%d",
+                dropped["missing_url"],
+                dropped["missing_index"],
+                dropped["out_of_range"],
+                dropped["invalid_utf8"],
+            )
         return citations
+
+    @staticmethod
+    def _decodes(segment: bytes) -> bool:
+        """Return whether ``segment`` is strictly valid UTF-8."""
+        try:
+            segment.decode("utf-8")
+        except UnicodeDecodeError:
+            return False
+        return True
 
     def _search_queries(self, response: interactions.Interaction) -> list[str]:
         """Return the search queries the model executed.

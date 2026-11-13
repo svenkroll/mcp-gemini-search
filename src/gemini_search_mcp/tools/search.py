@@ -18,7 +18,9 @@ offsets into ``answer`` (ADR 0003, adapter from issue #4; start inclusive, end
 exclusive). They are copied unchanged into :class:`Evidence`; the server never
 computes or corrects positions. ``Evidence.text`` is taken from
 ``answer.encode("utf-8")`` and decoded again, never from the ``str`` directly.
-Validation of the indices themselves is deliberately deferred (TD-004).
+The Gemini adapter validates every citation against the UTF-8 bytes of the
+answer and drops malformed ones (issue #20), so valid indices reach this
+module; the tolerance of :func:`evidence_text` is only a second line of defense.
 """
 
 from collections.abc import Iterable, Mapping, Sequence
@@ -436,8 +438,12 @@ def evidence_text(answer: str, start_index: int, end_index: int) -> str:
     in ``answer`` as its three bytes, so later offsets stay aligned and the
     surrogate itself becomes U+FFFD in the slice. Offsets beyond the answer
     are truncated by slicing; ``end_index <= start_index`` yields ``""``.
-    Never raises for any answer and any integer offsets (TD-004 defers the
-    validation of offsets).
+    Never raises for any answer and any integer offsets.
+
+    The Gemini adapter already validates citations and drops those with
+    missing, out-of-range or multi-byte-cutting offsets, so it delivers only
+    valid offsets. This tolerance is a second line of defense that protects
+    against providers that do not validate.
     """
     data = answer.encode("utf-8", errors="surrogatepass")
     return data[max(start_index, 0) : max(end_index, 0)].decode("utf-8", errors="replace")
