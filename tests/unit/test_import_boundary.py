@@ -25,7 +25,9 @@ ALLOWED_THIRD_PARTY: dict[str, frozenset[str]] = {
     "gemini_client": frozenset({"google"}),
     "urlpolicy": frozenset({"pydantic", "httpx"}),
     "tools": frozenset(),
-    "server": frozenset({"fastmcp", "pydantic", "pydantic_settings", "httpx", "google"}),
+    "server": frozenset(
+        {"fastmcp", "starlette", "uvicorn", "pydantic", "pydantic_settings", "httpx", "google"}
+    ),
     # The package root is not a layer: it may re-export the layers below it,
     # but it must not import a third-party package itself.
     ROOT_MODULE: frozenset(),
