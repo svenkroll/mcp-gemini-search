@@ -69,12 +69,12 @@ ERROR_MESSAGES: Mapping[FixedMessageCode, str] = MappingProxyType(
 INVALID_INPUT_MESSAGE_TEMPLATE = "Invalid input: {field} {rule}."
 """Message of ``invalid_input`` per ADR 0007: ``Invalid input: <field> <rule>.``"""
 
-InputField = Literal["query", "max_sources"]
-"""Input field names of the tool contracts (ADR 0003).
+InputField = Literal["query", "max_sources", "url", "question"]
+"""Input field names of the tool contracts (ADR 0003, ADR 0004).
 
-``analyze_url`` adds its fields (``url``, ``question``, ADR 0004) here in its
-own issue. Only these names may appear in an ``invalid_input`` message, so a
-client-supplied key or value can never be echoed.
+``query`` and ``max_sources`` belong to ``search``, ``url`` and ``question``
+to ``analyze_url``. Only these names may appear in an ``invalid_input``
+message, so a client-supplied key or value can never be echoed.
 """
 
 InputRule = Literal[
@@ -87,7 +87,7 @@ InputRule = Literal[
 ]
 """Contract rule texts that may follow the field name in ``invalid_input``.
 
-Each text names a rule of ADR 0003, never an input value. Example message:
+Each text names a rule of ADR 0003 or ADR 0004, never an input value. Example message:
 ``Invalid input: max_sources must be between 1 and 10.``
 """
 
