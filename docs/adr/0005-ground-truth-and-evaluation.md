@@ -58,11 +58,46 @@ days; validation reports this as a warning, not an error.
 
 ### Test resources
 
-Nothing is self-hosted. `url_html` and `url_pdf` use immutable public documents,
-e.g. RFCs at the RFC Editor, which exist as HTML and PDF. `url_failure` uses
-non-existent paths on such stable hosts and the reserved `.invalid` domain
-(RFC 2606). Prompt injection is not part of the live catalog; it is covered by
-unit tests (ADR 0008).
+Nothing is self-hosted. `url_html` and `url_pdf` use public documents that
+meet every one of these rules:
+
+- Immutable or versioned: a revision or version is part of the URL, or the
+  publisher guarantees the document never changes. Pages that can change
+  (news, "latest" documentation, wiki pages without a revision) are excluded.
+- HTTPS, passes the ADR 0008 input check, no login, paywall, cookie wall or
+  JavaScript-only content.
+- No redirect: the URL Gemini reports as retrieved equals the requested URL.
+- A PDF case URL serves the PDF itself, not a landing page.
+- The eight html/pdf cases use at least three hosts and at most two cases
+  per host, so one host that blocks Google's fetcher cannot break a category.
+- Question and `expected` are a specific statement answerable only from the
+  document. `expected` is verified against the document text, never against
+  a model answer alone.
+- `allowed_sources` is the registrable domain of the URL's host.
+
+`url_failure` uses three different failure reasons, each expecting
+`error:url_unreachable`: a host under the reserved `.invalid` domain
+(RFC 2606), a non-existent HTML path and a non-existent PDF path, the latter
+two on hosts that have a verified passing case of the same kind in the
+catalog. A failure case on a host that never succeeds is not allowed.
+
+Every URL case is verified live twice through the real `analyze_url` path
+with its exact question before it enters the catalog. An html/pdf case needs
+two successful retrievals whose reported URL equals the requested URL and
+whose answers state `expected`; a failure case needs two `url_unreachable`
+outcomes. One success and one failure is flaky and rejects the URL. The
+checker output of accepted and rejected candidates is committed under
+`eval/runs/<date>-url-verification/`.
+
+Reason: a live diagnosis on 2026-11-13 showed that Gemini URL Context cannot
+retrieve any document under `www.rfc-editor.org/rfc/` (HTML, TXT and PDF fail
+reproducibly), which the catalog had used for all URL cases. Gemini fetched
+`rfc-editor.org/info/rfcNNNN/` instead, and `analyze_url` correctly returned
+`url_unreachable` (ADR 0004). Whether a public URL is retrievable can only be
+established by a live check, not by its stability alone.
+
+Prompt injection is not part of the live catalog; it is covered by unit tests
+(ADR 0008).
 
 ### Scoring
 
@@ -78,20 +113,23 @@ computes rates and go/no-go from the completed file. Binary verdicts per case:
 | --- | --- |
 | Correctness | the core statement matches `expected` |
 | Groundedness | at least one piece of evidence supports the core statement |
-| Source quality | every returned source is a real target URL within `allowed_sources` |
+| Source quality | no returned source is a grounding redirect URL and at least one returned source lies within `allowed_sources` |
 | Honesty | for `honest_unknown`, no invented answer |
 
 | Metric | `answer` | `honest_unknown` | `error:<code>` |
 | --- | --- | --- | --- |
 | Correctness | manual | `n/a` | automatic |
 | Groundedness | manual | `n/a` | `n/a` |
-| Source quality | automatic | automatic, `n/a` without sources | `n/a` |
+| Source quality | automatic | `n/a` | `n/a` |
 | Honesty | `n/a` | manual | `n/a` |
 
 An `answer` case that returns a tool error fails correctness and groundedness
-automatically. Metrics that do not apply to a case are recorded as `n/a` and
-do not count in the denominator. Latency (p50, p95) and tokens are recorded
-but are not a blocking threshold.
+automatically. An `answer` case without any returned source, including one that
+returns a tool error, fails source quality; sources outside `allowed_sources`
+next to at least one allowed source do not fail it, a redirect URL always does.
+Metrics that do not apply to a case are recorded as `n/a` and do not count in
+the denominator. Latency (p50, p95) and tokens are recorded but are not a
+blocking threshold.
 
 ### Go/No-Go
 
@@ -118,4 +156,7 @@ Recurring live evaluations are not part of release 1 (`docs/roadmap.md`).
 
 - Changes: 2026-11-13, LLM judge and judge calibration replaced by manual
   scoring (option 4); implemented by issue #10.
+- Changes: 2026-11-13, rules for URL test resources and mandatory live
+  verification added; the RFC Editor is no longer used for URL cases.
+- [URL verification record 2026-11-13](../../eval/runs/2026-11-13-url-verification/README.md)
 - [PRD, section 6](../../PRD-gemini-search-mcp.md)

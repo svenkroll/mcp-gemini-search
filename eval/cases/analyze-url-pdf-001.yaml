@@ -2,10 +2,10 @@ id: analyze-url-pdf-001
 tool: analyze_url
 category: url_pdf
 input:
-  url: https://www.rfc-editor.org/rfc/rfc9110.pdf
-  question: What does the 404 (Not Found) status code indicate according to this document?
-expected: 404 indicates that the origin server did not find a current representation for the target resource or is not willing to disclose that one exists.
+  url: https://arxiv.org/pdf/1412.6980v9
+  question: Which default settings does this paper give for the AdaMax algorithm?
+expected: The good default settings for AdaMax are α = 0.002, β1 = 0.9 and β2 = 0.999.
 allowed_sources:
-- rfc-editor.org
-ground_truth_date: 2026-11-12
+- arxiv.org
+ground_truth_date: 2026-11-13
 expected_outcome: answer

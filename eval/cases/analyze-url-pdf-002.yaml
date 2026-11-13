@@ -2,10 +2,10 @@ id: analyze-url-pdf-002
 tool: analyze_url
 category: url_pdf
 input:
-  url: https://www.rfc-editor.org/rfc/rfc9293.pdf
-  question: How many bits long is the Sequence Number field in the TCP header?
-expected: The Sequence Number field in the TCP header is 32 bits long.
+  url: https://arxiv.org/pdf/1706.03762v7
+  question: Which value of warmup_steps did the authors use for the learning rate schedule?
+expected: The authors used warmup_steps = 4000.
 allowed_sources:
-- rfc-editor.org
-ground_truth_date: 2026-11-12
+- arxiv.org
+ground_truth_date: 2026-11-13
 expected_outcome: answer

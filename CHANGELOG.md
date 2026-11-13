@@ -27,6 +27,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- #10: Eval script `eval/run_eval.py`: `run` sends every catalog case to the
+  server over MCP (stdio), applies the automatic checks (error code, at least one
+  allowed source, no grounding redirect URL) and writes `results.jsonl`, `run.json`,
+  `server.log` and `review.md` under `eval/runs/<date>-<name>/`; `score`
+  reads the manual verdicts from `review.md` and writes `report.md` with the
+  rates, p50/p95 latency, token totals and the go/no-go result of ADR 0005.
+  `run` needs `LIVE=1` and a `GEMINI_API_KEY`; `make eval` runs it without
+  setting `LIVE`. No LLM judge, no new dependencies.
 - #9: Bearer token access control for `/mcp` with `MCP_TRANSPORT=http`, through
   FastMCP's `auth` mechanism and a constant-time token verifier. A missing or
   wrong token is answered with HTTP 401 and `WWW-Authenticate: Bearer`; the

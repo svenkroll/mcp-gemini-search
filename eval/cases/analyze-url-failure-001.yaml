@@ -2,10 +2,10 @@ id: analyze-url-failure-001
 tool: analyze_url
 category: url_failure
 input:
-  url: https://rfc-editor.invalid/rfc/rfc1035.html
-  question: Which protocol does RFC 1035 specify?
-expected: The tool reports an error and never presents model knowledge as page content.
+  url: https://toml.invalid/en/v1.0.0
+  question: Which range of integers should a TOML implementation accept and handle losslessly according to this specification?
+expected: The tool reports an error because the host is under the reserved .invalid domain and never presents model knowledge as page content.
 allowed_sources:
-- rfc-editor.invalid
-ground_truth_date: 2026-11-12
+- toml.invalid
+ground_truth_date: 2026-11-13
 expected_outcome: error:url_unreachable

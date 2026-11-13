@@ -2,10 +2,10 @@ id: analyze-url-html-003
 tool: analyze_url
 category: url_html
 input:
-  url: https://www.rfc-editor.org/rfc/rfc8446.html
-  question: Which cipher suite must a TLS-compliant application implement according to this document?
-expected: A TLS-compliant application must implement the TLS_AES_128_GCM_SHA256 cipher suite.
+  url: https://www.conventionalcommits.org/en/v1.0.0/
+  question: Which token is synonymous with BREAKING CHANGE when used in a footer according to this specification?
+expected: BREAKING-CHANGE is synonymous with BREAKING CHANGE when used as a token in a footer.
 allowed_sources:
-- rfc-editor.org
-ground_truth_date: 2026-11-12
+- conventionalcommits.org
+ground_truth_date: 2026-11-13
 expected_outcome: answer

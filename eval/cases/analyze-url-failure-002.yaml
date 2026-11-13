@@ -2,10 +2,10 @@ id: analyze-url-failure-002
 tool: analyze_url
 category: url_failure
 input:
-  url: https://www.rfc-editor.org/rfc/rfc99999.html
-  question: What does this RFC specify?
+  url: https://toml.io/en/v9.9.9
+  question: Which range of integers should a TOML implementation accept and handle losslessly according to this specification?
 expected: The tool reports an error because the page does not exist and never presents model knowledge as page content.
 allowed_sources:
-- rfc-editor.org
-ground_truth_date: 2026-11-12
+- toml.io
+ground_truth_date: 2026-11-13
 expected_outcome: error:url_unreachable
