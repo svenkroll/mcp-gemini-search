@@ -13,7 +13,11 @@ Reasons carried by :class:`UrlRejected` are for logging only and must not be
 shown to clients.
 """
 
+import asyncio
+import ipaddress
+
 import httpx
+from pydantic import HttpUrl, TypeAdapter, ValidationError
 
 REDIRECT_ALLOWLIST: frozenset[str] = frozenset({"vertexaisearch.cloud.google.com"})
 """Lower-case hosts that may be contacted for redirect resolution."""
@@ -41,6 +45,9 @@ PER_URL_TIMEOUT_SECONDS = 5.0
 
 TOTAL_BUDGET_SECONDS = 8.0
 """Overall budget for one :func:`resolve_redirects` call."""
+
+_HTTP_URL_ADAPTER: TypeAdapter[HttpUrl] = TypeAdapter(HttpUrl)
+"""Pydantic parser for URL syntax; it performs no network access."""
 
 
 class UrlRejected(ValueError):
@@ -88,7 +95,42 @@ def check_url(url: str) -> str:
     Raises:
         UrlRejected: if any rule is violated; ``reason`` names the rule.
     """
-    raise NotImplementedError
+    if len(url) > MAX_URL_LENGTH:
+        raise UrlRejected("length")
+
+    try:
+        parsed = _HTTP_URL_ADAPTER.validate_python(url)
+    except ValidationError as exc:
+        reason = "scheme" if exc.errors()[0]["type"] == "url_scheme" else "syntax"
+        raise UrlRejected(reason) from None
+
+    if parsed.username is not None or parsed.password is not None:
+        raise UrlRejected("credentials")
+
+    if parsed.port not in ALLOWED_PORTS:
+        raise UrlRejected("port")
+
+    host = parsed.host
+    if not host:
+        raise UrlRejected("missing_host")
+
+    literal = host[1:-1] if host.startswith("[") and host.endswith("]") else host
+    try:
+        address = ipaddress.ip_address(literal)
+    except ValueError:
+        address = None
+    if address is not None:
+        if isinstance(address, ipaddress.IPv6Address) and address.ipv4_mapped is not None:
+            is_global = address.ipv4_mapped.is_global
+        else:
+            is_global = address.is_global
+        if not is_global:
+            raise UrlRejected("ip_literal")
+
+    if host.lower().rstrip(".").endswith(BLOCKED_HOST_SUFFIXES):
+        raise UrlRejected("host_suffix")
+
+    return str(parsed)
 
 
 async def resolve_redirect(url: str, client: httpx.AsyncClient) -> str | None:
@@ -119,7 +161,45 @@ async def resolve_redirect(url: str, client: httpx.AsyncClient) -> str | None:
         ``Location``, too many redirects, or a target rejected by
         :func:`check_url`. Never raises for these cases.
     """
-    raise NotImplementedError
+    try:
+        current = httpx.URL(url)
+    except httpx.InvalidURL, ValueError:
+        return None
+
+    if current.scheme != "https" or current.host not in REDIRECT_ALLOWLIST:
+        return None
+
+    redirects = 0
+    while True:
+        try:
+            async with client.stream("GET", current) as response:
+                if not response.is_redirect:
+                    return None
+                location = response.headers.get("Location")
+        except httpx.HTTPError:
+            return None
+
+        if location is None:
+            return None
+
+        try:
+            target = current.join(location)
+        except httpx.InvalidURL, ValueError:
+            return None
+
+        if target.host in REDIRECT_ALLOWLIST:
+            if target.scheme != "https":
+                return None
+            redirects += 1
+            if redirects > MAX_REDIRECTS:
+                return None
+            current = target
+            continue
+
+        try:
+            return check_url(str(target))
+        except UrlRejected:
+            return None
 
 
 async def resolve_redirects(
@@ -153,4 +233,43 @@ async def resolve_redirects(
         its normalized target URL, or ``None`` if unresolved. Never raises
         for resolution failures.
     """
-    raise NotImplementedError
+    distinct = list(dict.fromkeys(urls))
+    if not distinct:
+        return {}
+
+    results: dict[str, str | None] = dict.fromkeys(distinct)
+    semaphore = asyncio.Semaphore(max_concurrency)
+    timeout = httpx.Timeout(per_url_timeout, connect=connect_timeout)
+
+    async with httpx.AsyncClient(
+        transport=transport,
+        follow_redirects=False,
+        timeout=timeout,
+    ) as client:
+
+        async def resolve_one(url: str) -> str | None:
+            async with semaphore:
+                try:
+                    return await asyncio.wait_for(
+                        resolve_redirect(url, client),
+                        timeout=per_url_timeout,
+                    )
+                except TimeoutError, httpx.HTTPError:
+                    return None
+
+        tasks = {url: asyncio.create_task(resolve_one(url)) for url in distinct}
+        done, pending = await asyncio.wait(tasks.values(), timeout=total_budget)
+
+        for url, task in tasks.items():
+            if task in done:
+                try:
+                    results[url] = task.result()
+                except Exception:
+                    results[url] = None
+            else:
+                task.cancel()
+
+        if pending:
+            await asyncio.gather(*pending, return_exceptions=True)
+
+    return results
