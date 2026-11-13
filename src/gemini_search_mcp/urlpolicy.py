@@ -17,9 +17,12 @@ The module-level limit constants are read at call time, so tests may override
 them (e.g. with ``monkeypatch``) to keep time-based tests short.
 """
 
+import asyncio
+import ipaddress
 from collections.abc import Sequence
 
 import httpx
+from pydantic import HttpUrl, TypeAdapter, ValidationError
 
 MAX_URL_LENGTH = 2048
 """Maximum length of a URL in characters, measured on the unmodified input."""
@@ -49,6 +52,12 @@ resolution (not from when it queued for a free concurrency slot)."""
 
 OVERALL_BUDGET_SECONDS = 8.0
 """Overall time budget of one :func:`resolve_redirects` call, queueing included."""
+
+_HTTP_URL_ADAPTER: TypeAdapter[HttpUrl] = TypeAdapter(HttpUrl)
+"""Shared parser for the URL syntax check; it performs no network access."""
+
+_REDIRECT_STATUSES = frozenset({301, 302, 303, 307, 308})
+"""HTTP status codes treated as redirects."""
 
 
 class UrlRejectedError(Exception):
@@ -102,7 +111,93 @@ def check_url(url: str) -> str:
             rule. Syntactically invalid input is rejected the same way, never
             with another exception type.
     """
-    raise NotImplementedError
+    if len(url) > MAX_URL_LENGTH:
+        raise UrlRejectedError("url too long")
+
+    try:
+        parsed = _HTTP_URL_ADAPTER.validate_python(url)
+    except ValidationError as exc:
+        raise UrlRejectedError("invalid url") from exc
+
+    if parsed.username is not None or parsed.password is not None:
+        raise UrlRejectedError("credentials not allowed")
+
+    if parsed.port not in ALLOWED_PORTS:
+        raise UrlRejectedError("port not allowed")
+
+    host = parsed.host
+    if host is None:
+        raise UrlRejectedError("host missing")
+
+    literal = host[1:-1] if host.startswith("[") and host.endswith("]") else host
+    try:
+        address = ipaddress.ip_address(literal)
+    except ValueError:
+        pass
+    else:
+        if isinstance(address, ipaddress.IPv6Address) and address.ipv4_mapped is not None:
+            address = address.ipv4_mapped
+        if not address.is_global:
+            raise UrlRejectedError("ip literal not global")
+        return str(parsed)
+
+    normalized_host = host.lower().removesuffix(".")
+    if any(normalized_host.endswith(suffix) for suffix in FORBIDDEN_HOST_SUFFIXES):
+        raise UrlRejectedError("forbidden host suffix")
+
+    return str(parsed)
+
+
+def _is_allowlist_https(url: str) -> bool:
+    """Return whether ``url`` may be requested by the fetch check."""
+    parsed = httpx.URL(url)
+    return (
+        parsed.scheme == "https"
+        and parsed.host in REDIRECT_ALLOWLIST
+        and parsed.port in (None, 443)
+    )
+
+
+async def _request_headers(client: httpx.AsyncClient, url: str) -> tuple[int, str | None] | None:
+    """Request ``url`` and return status and ``Location`` without reading the body."""
+    timeout = httpx.Timeout(URL_TIMEOUT_SECONDS, connect=CONNECT_TIMEOUT_SECONDS)
+    request = client.build_request("GET", url, timeout=timeout)
+    try:
+        response = await client.send(request, stream=True, follow_redirects=False)
+    except httpx.HTTPError, httpx.InvalidURL:
+        return None
+    try:
+        return response.status_code, response.headers.get("Location")
+    finally:
+        await response.aclose()
+
+
+async def _follow_redirects(client: httpx.AsyncClient, start: str) -> str | None:
+    """Follow allowlist redirects from ``start`` and return the first external target."""
+    current = start
+    hops = 0
+    while True:
+        fetched = await _request_headers(client, current)
+        if fetched is None:
+            return None
+        status, location = fetched
+        if status not in _REDIRECT_STATUSES or location is None or not location.strip():
+            return None
+
+        try:
+            target = check_url(str(httpx.URL(current).join(location)))
+        except UrlRejectedError, httpx.InvalidURL, ValueError:
+            return None
+
+        if not _is_allowlist_https(target):
+            if httpx.URL(target).host in REDIRECT_ALLOWLIST:
+                return None
+            return target
+
+        if hops >= MAX_REDIRECTS:
+            return None
+        hops += 1
+        current = target
 
 
 async def resolve_redirect(url: str, client: httpx.AsyncClient) -> str | None:
@@ -148,7 +243,19 @@ async def resolve_redirect(url: str, client: httpx.AsyncClient) -> str | None:
     Returns:
         The normalized target URL, or ``None`` if the URL is unresolved.
     """
-    raise NotImplementedError
+    try:
+        start = check_url(url)
+    except UrlRejectedError:
+        return None
+
+    if not _is_allowlist_https(start):
+        return None
+
+    try:
+        async with asyncio.timeout(URL_TIMEOUT_SECONDS):
+            return await _follow_redirects(client, start)
+    except TimeoutError:
+        return None
 
 
 async def resolve_redirects(
@@ -174,4 +281,26 @@ async def resolve_redirects(
         URL is unresolved. An empty ``urls`` yields ``{}`` without any request.
         Never raises for network failures or timeouts.
     """
-    raise NotImplementedError
+    distinct = list(dict.fromkeys(urls))
+    if not distinct:
+        return {}
+
+    semaphore = asyncio.Semaphore(MAX_CONCURRENCY)
+    results: dict[str, str | None] = {}
+
+    async def resolve_one(url: str) -> None:
+        async with semaphore:
+            results[url] = await resolve_redirect(url, client)
+
+    tasks = [asyncio.create_task(resolve_one(url)) for url in distinct]
+    try:
+        async with asyncio.timeout(OVERALL_BUDGET_SECONDS):
+            await asyncio.gather(*tasks)
+    except TimeoutError:
+        pass
+    finally:
+        for task in tasks:
+            task.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
+
+    return {url: results.get(url) for url in distinct}
