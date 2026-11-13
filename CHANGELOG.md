@@ -27,6 +27,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- #29: Probe script `eval/probe_citation_offsets.py` that measures against the
+  live Gemini API whether `url_citation` indices are relative to the whole answer
+  or to their own text block (input for #20). It writes numbers, prompt ids and
+  classifications only to `eval/runs/<date>-offset-probe/probe.jsonl` and needs
+  `LIVE=1` and a `GEMINI_API_KEY`. No new dependencies.
 - #10: Eval script `eval/run_eval.py`: `run` sends every catalog case to the
   server over MCP (stdio), applies the automatic checks (error code, at least one
   allowed source, no grounding redirect URL) and writes `results.jsonl`, `run.json`,
