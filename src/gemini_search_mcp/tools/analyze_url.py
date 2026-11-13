@@ -36,7 +36,7 @@ from dataclasses import dataclass
 from types import MappingProxyType
 from typing import Any, Literal, Self, cast
 
-from gemini_search_mcp.provider import Retrieval, SearchProvider, Usage
+from gemini_search_mcp.provider import Retrieval, SearchProvider, UrlAnalysisResult, Usage
 from gemini_search_mcp.tools.errors import InvalidInputError, ToolError, tool_error_from_exception
 from gemini_search_mcp.urlpolicy import UrlRejectedError, check_url
 
@@ -255,13 +255,21 @@ async def run_analyze_url(
             The error carries only its fixed message, never provider answer
             text; the original exception is only available as ``__cause__``.
 
+    A failure after the provider returned a result (``url_unsafe``,
+    ``url_unreachable``) carries that result's usage and model on the error
+    (:meth:`ToolError.with_response`); a failure of the provider call carries
+    none.
+
     Cancellation (``asyncio.CancelledError``) propagates unmapped.
     """
+    result: UrlAnalysisResult | None = None
     try:
         result = await provider.analyze_url(tool_input.url, tool_input.question)
         url = select_retrieved_url(result.retrievals, tool_input.url)
     except Exception as error:
         mapped = tool_error_from_exception(error)
+        if result is not None:
+            mapped.with_response(result.usage, result.model)
         if mapped is error:
             raise
         raise mapped from error

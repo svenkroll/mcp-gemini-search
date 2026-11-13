@@ -69,6 +69,21 @@ Technical error details go into an additional line with `event:
 "error_detail"` and the same `request_id`. Never logged: API key,
 authorization header, bearer token, secrets and web content.
 
+When a call ends with a tool error after Gemini answered (`url_unreachable`,
+`url_unsafe`), the `tool_call` line still carries `model`, `input_tokens` and
+`output_tokens` of that response, because the call was billed. Without a Gemini
+response (input rejected, provider error) the token fields are `null`.
+
+The loggers of the HTTP client libraries and the Google GenAI SDK (`httpx`,
+`httpx2`, `httpcore`, `httpcore2`, `google_genai`, `google.genai`) are capped
+at `WARNING` regardless of `LOG_LEVEL`, or at the root level when that is
+stricter. At `INFO` they write the full URL of every request, including each
+resolved grounding redirect, and at `DEBUG` connection and header details; the
+SDK's debug mode (`GOOGLE_GENAI_DEBUG`, logger `google.genai`) also logs all
+request headers including the API key. That is web content and secrets, and it
+would add lines beyond the one `tool_call` line per call. Their `WARNING` and
+`ERROR` records still go through the JSON formatter.
+
 ## Consequences
 
 - Good: Agents can recognize failed calls and re-plan.

@@ -94,6 +94,23 @@ HEALTH_READY_PATH = "/health/ready"
 TOOL_CALL_LOGGER_NAME = "gemini_search_mcp.tool_call"
 """Logger that carries the ``tool_call`` and ``error_detail`` lines (ADR 0007)."""
 
+HTTP_CLIENT_LOGGER_NAMES = (
+    "httpx",
+    "httpx2",
+    "httpcore",
+    "httpcore2",
+    "google_genai",
+    "google.genai",
+)
+"""Loggers of the HTTP client libraries and the Google GenAI SDK, capped at ``WARNING``.
+
+At ``INFO`` they log every request URL (resolved grounding redirects, Gemini
+requests), at ``DEBUG`` connection and header details; ADR 0007 never logs web
+content, and the SDK's debug mode (``GOOGLE_GENAI_DEBUG``, logger
+``google.genai``) writes all request headers including the API key. Child
+loggers (``httpcore.connection``) inherit the cap.
+"""
+
 ToolName = Literal["search", "analyze_url"]
 """Names of the two registered tools; also the ``tool`` log field (ADR 0007)."""
 
@@ -276,10 +293,11 @@ class ToolCallLogEntry:
         error_code: the ADR 0007 code when ``status`` is ``"error"``, otherwise
             ``None``.
         duration_ms: total duration of the call in whole milliseconds, ``>= 0``.
-        model: the model the provider reported; when no provider result exists
-            (error or cancellation) ``Settings.gemini_model``.
-        input_tokens: from the provider usage, otherwise ``None``.
-        output_tokens: from the provider usage, otherwise ``None``.
+        model: the model the provider reported; when no provider response exists
+            (input error, provider error or cancellation) ``Settings.gemini_model``.
+        input_tokens: from the usage of the Gemini response, also when the call
+            ends with a tool error after that response; otherwise ``None``.
+        output_tokens: as ``input_tokens``.
         query: only set when ``LOG_QUERIES`` is enabled: the ``query`` argument
             for ``search``, the ``question`` argument (never the URL) for
             ``analyze_url``, each unchanged as received; ``None`` when query
@@ -467,7 +485,9 @@ class ContractTool(Tool):
            ``error_code=None``, model and tokens from the handler result.
         4. ``Exception``: map it with ``tool_error_from_exception`` (a
            ``ToolError`` stays unchanged); return :func:`error_result` with
-           the request ID; log ``status="error"`` with the code, and, when
+           the request ID; log ``status="error"`` with the code, the model and
+           tokens of the Gemini response when the error carries one (``usage``
+           of the ``ToolError``), otherwise ``None`` tokens, and, when
            :func:`error_detail_fields` returns a dict, one additional
            ``error_detail`` line with the same request ID.
         5. ``asyncio.CancelledError`` (client cancellation): log
@@ -490,8 +510,10 @@ class ContractTool(Tool):
         def entry(
             status: ToolCallStatus,
             error_code: ErrorCode | None = None,
-            success: ToolCallSuccess | None = None,
+            response: ToolCallSuccess | ToolError | None = None,
         ) -> ToolCallLogEntry:
+            usage = response.usage if response is not None else None
+            model = response.model if response is not None else None
             return ToolCallLogEntry(
                 ts=_utc_timestamp(),
                 level="error" if status == "error" else "info",
@@ -500,9 +522,9 @@ class ContractTool(Tool):
                 status=status,
                 error_code=error_code,
                 duration_ms=int((time.monotonic() - started) * 1000),
-                model=success.model if success is not None else self.default_model,
-                input_tokens=success.usage.input_tokens if success is not None else None,
-                output_tokens=success.usage.output_tokens if success is not None else None,
+                model=model if model is not None else self.default_model,
+                input_tokens=usage.input_tokens if usage is not None else None,
+                output_tokens=usage.output_tokens if usage is not None else None,
                 query=query,
             )
 
@@ -515,7 +537,7 @@ class ContractTool(Tool):
             error = tool_error_from_exception(exc)
             logger.error(
                 "tool_call",
-                extra={"json_fields": entry("error", error.code).to_log_fields()},
+                extra={"json_fields": entry("error", error.code, error).to_log_fields()},
             )
             detail = error_detail_fields(request_id, error)
             if detail is not None:
@@ -769,7 +791,11 @@ def configure_logging(level: LogLevel, stream: TextIO | None = None) -> None:
       removed;
     - the root logger level is ``level`` (``"warning"`` -> ``WARNING`` etc.);
     - the :data:`TOOL_CALL_LOGGER_NAME` logger has level ``INFO``, so the one
-      ``tool_call`` line per call is written for every ``LOG_LEVEL``.
+      ``tool_call`` line per call is written for every ``LOG_LEVEL``;
+    - every logger of :data:`HTTP_CLIENT_LOGGER_NAMES` has the level ``WARNING``,
+      or the root level when that is stricter, so no request URL is logged at
+      any ``LOG_LEVEL``; their ``WARNING`` records still go through
+      :class:`JsonLogFormatter`.
 
     Calling it again replaces the previous configuration (idempotent).
     """
@@ -781,6 +807,9 @@ def configure_logging(level: LogLevel, stream: TextIO | None = None) -> None:
     root.addHandler(handler)
     root.setLevel(level.upper())
     logging.getLogger(TOOL_CALL_LOGGER_NAME).setLevel(logging.INFO)
+    cap = max(logging.WARNING, root.level)
+    for name in HTTP_CLIENT_LOGGER_NAMES:
+        logging.getLogger(name).setLevel(cap)
 
 
 def main() -> None:
