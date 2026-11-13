@@ -102,6 +102,26 @@ class RedirectResolution:
 
 _HTTP_URL = TypeAdapter(HttpUrl)
 
+_NAT64_NETWORK = ipaddress.IPv6Network("64:ff9b::/96")
+"""Well-known NAT64 prefix carrying an IPv4 address in its last 32 bits."""
+
+
+def _has_non_global_embedded_ipv4(
+    address: ipaddress.IPv4Address | ipaddress.IPv6Address,
+) -> bool:
+    """Whether an IPv6 literal embeds a non-global IPv4 address.
+
+    Covers IPv4-mapped IPv6 (``::ffff:0:0/96``) via ``ipv4_mapped`` and the
+    well-known NAT64 prefix ``64:ff9b::/96``. Only the last 32 bits are
+    extracted; no address text is parsed here.
+    """
+    if not isinstance(address, ipaddress.IPv6Address):
+        return False
+    embedded = address.ipv4_mapped
+    if embedded is None and address in _NAT64_NETWORK:
+        embedded = ipaddress.IPv4Address(int(address) & 0xFFFFFFFF)
+    return embedded is not None and not embedded.is_global
+
 
 def _parse_input_url(url: str) -> HttpUrl:
     """Apply the input rules of ADR 0008 and return the parsed, normalized URL.
@@ -132,8 +152,13 @@ def _parse_input_url(url: str) -> HttpUrl:
     except ValueError:
         pass
     else:
-        if not address.is_global:
-            raise UrlPolicyError("url host must not be a non-global IP address")
+        if (
+            not address.is_global
+            or address.is_multicast
+            or address.is_reserved
+            or _has_non_global_embedded_ipv4(address)
+        ):
+            raise UrlPolicyError("url host must not be a non-public IP address")
 
     normalized_host = host.rstrip(".").lower()
     if normalized_host == "localhost" or normalized_host.endswith(
@@ -167,10 +192,14 @@ def check_input_url(url: str) -> str:
        (EC3).
     5. **IP literal**: if the host is an IPv4 or IPv6 literal (pydantic
        keeps the surrounding brackets of an IPv6 literal; they are removed
-       before the check), its address must satisfy
-       ``ipaddress.ip_address(...).is_global``. This rejects loopback,
-       private, link-local, multicast, CGNAT, reserved and IPv4-mapped IPv6
-       addresses: ``[::1]``, ``[::ffff:127.0.0.1]`` and ``100.64.0.1`` are
+       before the check), its address must satisfy ``is_global`` and must be
+       neither multicast nor reserved (``ipaddress`` ``is_multicast`` and
+       ``is_reserved``); additionally, an IPv4 address embedded in an
+       IPv4-mapped IPv6 literal or in the NAT64 prefix ``64:ff9b::/96`` must
+       itself be global. This rejects loopback, private, link-local,
+       multicast, CGNAT, reserved and IPv4-mapped IPv6 addresses:
+       ``[::1]``, ``[::ffff:127.0.0.1]``, ``224.0.0.1``, ``[ff00::1]``,
+       ``[::7f00:1]``, ``[64:ff9b::127.0.0.1]`` and ``100.64.0.1`` are
        rejected, ``[2606:4700:4700::1111]`` and ``8.8.8.8`` are allowed
        (EC4, EC5).
     6. **Host name suffixes**: the host, after removing trailing dots and
@@ -240,8 +269,9 @@ async def resolve_redirects(
       relative target on the allowlist host becomes absolute and is followed
       as the next hop (EC9).
     - a ``Location`` target whose normalized host is on the allowlist and
-      whose scheme is ``https`` is followed as the next hop. At most
-      :data:`MAX_REDIRECTS` (5) redirects are followed within the
+      whose scheme is ``https`` passes :func:`check_input_url` (so it carries
+      no credentials and no non-default port) and is followed as the next
+      hop. At most :data:`MAX_REDIRECTS` (5) redirects are followed within the
       allowlist; a chain that would need a sixth hop within the allowlist
       counts as unresolved (AC3).
     - the first ``Location`` target outside the allowlist is never fetched.
@@ -378,7 +408,10 @@ async def _resolve_one(
         if target_host in REDIRECT_ALLOWLIST:
             if target.scheme.lower() != "https" or followed >= MAX_REDIRECTS:
                 return None
-            current = str(target)
+            try:
+                current = check_input_url(str(target))
+            except UrlPolicyError:
+                return None
             followed += 1
             continue
 

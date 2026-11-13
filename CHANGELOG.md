@@ -59,3 +59,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the branch is covered by offline tests.
   A failed automatic-continuation hop is classified by its cause with the same
   mapping as a direct error (`_classify`); a retryable cause is not retried.
+- #5: Framework-free `urlpolicy` module with the ADR 0008 input check and
+  grounding redirect resolution, plus the exactly pinned `httpx==0.28.1`
+  dependency.
