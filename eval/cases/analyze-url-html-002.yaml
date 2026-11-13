@@ -2,10 +2,10 @@ id: analyze-url-html-002
 tool: analyze_url
 category: url_html
 input:
-  url: https://www.rfc-editor.org/rfc/rfc2606.html
-  question: Which top-level domain names does this document reserve?
-expected: RFC 2606 reserves the top-level domain names .test, .example, .invalid and .localhost.
+  url: https://spec.commonmark.org/0.31.2/
+  question: Which tab stop does this specification assume for tabs in contexts where spaces help to define block structure?
+expected: In contexts where spaces help to define block structure, tabs behave as if they were replaced by spaces with a tab stop of 4 characters.
 allowed_sources:
-- rfc-editor.org
-ground_truth_date: 2026-11-12
+- commonmark.org
+ground_truth_date: 2026-11-13
 expected_outcome: answer

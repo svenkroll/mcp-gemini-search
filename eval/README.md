@@ -67,21 +67,69 @@ that include the `url_html`, `url_pdf` and `url_failure` categories must set
 The minimum distribution sums to at least 41 cases; it is only enforced in
 strict mode.
 
-## Choosing Stable Public URLs
+## Adding a URL case
 
-Nothing is self-hosted (ADR 0005):
+Nothing is self-hosted (ADR 0005, "Test resources"). Whether Gemini URL
+Context can retrieve a public URL cannot be predicted: on 2026-11-13 every
+document under `www.rfc-editor.org/rfc/` failed reproducibly. A URL case
+therefore enters the catalog only after it meets every rule and has been
+verified live.
 
-- `url_html` and `url_pdf` use immutable public documents, preferably RFCs
-  at the RFC Editor, which exist as HTML
-  (`https://www.rfc-editor.org/rfc/rfc<number>.html`) and, for RFCs
-  published in the XML v3 format (roughly RFC 8650 onward), as PDF
-  (`https://www.rfc-editor.org/rfc/rfc<number>.pdf`). Older RFCs have no
-  PDF at the RFC Editor; check that a URL returns 200 before using it.
-- `url_failure` uses non-existent paths on such stable hosts and the
-  reserved `.invalid` domain (RFC 2606), which can never be retrieved.
-  Expected outcome is `error:url_unreachable`.
-- Prompt injection is not part of the live catalog; it is covered by unit
-  tests (ADR 0008).
+Rules for `url_html` and `url_pdf`:
+
+- Immutable or versioned content: a revision or version is part of the URL
+  (for example `https://arxiv.org/pdf/<id>v<n>`, `https://toml.io/en/v1.0.0`),
+  or the publisher guarantees the document never changes. News, "latest"
+  documentation and wiki pages without a revision are not allowed.
+- HTTPS, passes the ADR 0008 input check, no login, paywall, cookie wall or
+  JavaScript-only content.
+- No redirect: the URL Gemini reports as retrieved equals the requested URL.
+- A PDF case URL serves the PDF itself, not an HTML landing page.
+- At least 3 different hosts across the 8 html/pdf cases, at most 2 cases per
+  host.
+- Question and `expected` are a specific statement (a value, a definition, a
+  named section) answerable only from the document. Verify `expected` against
+  the document text itself, never against the model answer alone. URL Context
+  truncates long documents, so ask about content near the beginning of a long
+  page.
+- `allowed_sources` is the registrable domain of the URL's host.
+
+Rules for `url_failure`: three different failure reasons, each with
+`error:url_unreachable`:
+
+1. a host under the reserved `.invalid` domain (RFC 2606);
+2. a non-existent HTML path on a host that has a verified passing case in the
+   catalog;
+3. a non-existent PDF path on a host that has a verified passing PDF case.
+
+A failure case on a host that never succeeds is not allowed.
+
+Verification (live Gemini calls, run manually by the project owner or with
+their explicit authorization): check every URL twice with the exact question
+of the case through the real `analyze_url` path. The checker script is the
+project owner's and is not part of this repository:
+
+```bash
+uv run python .issue-drafts/check_url_context.py --key-file <key file> \
+    --repeat 2 --question "<case question>" "<url>"
+```
+
+- An html/pdf case is accepted only if both attempts have `outcome: "ok"`,
+  `reported_url` equals the requested URL and both answers state `expected`.
+- A failure case is accepted only if both attempts have
+  `outcome: "url_unreachable"`.
+- One success and one failure means flaky: reject the URL, do not retry it
+  into the catalog.
+- Commit the checker output of accepted and rejected candidates as
+  `eval/runs/<date>-url-verification/check.jsonl` with a `README.md` that
+  lists every final case and every rejected candidate with its reason. Set
+  `ground_truth_date` to the verification date.
+
+The current record is
+[`eval/runs/2026-11-13-url-verification/`](runs/2026-11-13-url-verification/README.md).
+
+Prompt injection is not part of the live catalog; it is covered by unit
+tests (ADR 0008).
 
 ## Maintaining Time-Dependent Cases
 
