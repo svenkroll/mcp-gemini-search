@@ -182,6 +182,7 @@ def tool_error_from_exception(error: Exception) -> ToolError:
     - a :class:`ToolError` (including :class:`InvalidInputError`) is returned
       unchanged;
     - a ``ProviderError`` becomes ``ToolError(PROVIDER_ERROR_CODES[kind])``;
+      a ``kind`` missing from that table becomes ``internal_error``;
     - every other exception becomes ``ToolError("internal_error")``.
 
     Postcondition: the returned error's message is the fixed message of its
@@ -194,7 +195,7 @@ def tool_error_from_exception(error: Exception) -> ToolError:
     if isinstance(error, ToolError):
         return error
     if isinstance(error, ProviderError):
-        mapped = ToolError(PROVIDER_ERROR_CODES[error.kind])
+        mapped = ToolError(PROVIDER_ERROR_CODES.get(error.kind, "internal_error"))
     else:
         mapped = ToolError("internal_error")
     mapped.__cause__ = error

@@ -429,12 +429,15 @@ def _is_grounding_redirect(url: str) -> bool:
 def evidence_text(answer: str, start_index: int, end_index: int) -> str:
     """Return the slice of ``answer`` between two UTF-8 byte offsets.
 
-    Computes ``answer.encode("utf-8")[start:end]`` with negative offsets
-    treated as 0, and decodes it with ``errors="replace"``, so an offset inside
-    a multi-byte character yields U+FFFD instead of an exception. Offsets
-    beyond the answer are truncated by slicing; ``end_index <= start_index``
-    yields ``""``. Never raises for any integer offsets (TD-004 defers the
+    Computes ``answer.encode("utf-8", errors="surrogatepass")[start:end]``
+    with negative offsets treated as 0, and decodes it with
+    ``errors="replace"``, so an offset inside a multi-byte character yields
+    U+FFFD instead of an exception. ``surrogatepass`` encodes a lone surrogate
+    in ``answer`` as its three bytes, so later offsets stay aligned and the
+    surrogate itself becomes U+FFFD in the slice. Offsets beyond the answer
+    are truncated by slicing; ``end_index <= start_index`` yields ``""``.
+    Never raises for any answer and any integer offsets (TD-004 defers the
     validation of offsets).
     """
-    data = answer.encode("utf-8")
+    data = answer.encode("utf-8", errors="surrogatepass")
     return data[max(start_index, 0) : max(end_index, 0)].decode("utf-8", errors="replace")
