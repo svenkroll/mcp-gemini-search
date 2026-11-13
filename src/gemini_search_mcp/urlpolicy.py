@@ -17,11 +17,15 @@ Rejection reasons and unresolved outcomes are meant for logging only; they
 never reach a client (ADR 0007). Nothing in this module logs a URL.
 """
 
+import asyncio
+import ipaddress
 from collections.abc import Iterable
 from dataclasses import dataclass
-from typing import Literal
+from typing import Literal, cast
+from urllib.parse import urljoin
 
 import httpx
+from pydantic import HttpUrl, ValidationError
 
 MAX_URL_LENGTH = 2048
 """Maximum number of characters of an accepted or returned URL (ADR 0008)."""
@@ -155,7 +159,57 @@ def check_url(url: str) -> str:
     Raises:
         UrlRejectedError: with the reason of the first violated rule.
     """
-    raise NotImplementedError
+    if len(url) > MAX_URL_LENGTH:
+        raise UrlRejectedError("length")
+
+    try:
+        parsed = HttpUrl(url)
+    except ValidationError as error:
+        reason: RejectionReason = (
+            "scheme" if any(item["type"] == "url_scheme" for item in error.errors()) else "syntax"
+        )
+        raise UrlRejectedError(reason) from None
+
+    # ``HttpUrl`` guarantees a host; the cast only narrows the optional type.
+    host = cast(str, parsed.host)
+
+    if parsed.username is not None or parsed.password is not None:
+        raise UrlRejectedError("credentials")
+
+    if parsed.port not in ALLOWED_PORTS:
+        raise UrlRejectedError("port")
+
+    address = _ip_literal(host)
+    if address is not None:
+        if isinstance(address, ipaddress.IPv6Address) and address.ipv4_mapped is not None:
+            address = address.ipv4_mapped
+        if not address.is_global or address.is_multicast:
+            raise UrlRejectedError("ip_literal")
+
+    host_name = host.lower()
+    if host_name.endswith("."):
+        host_name = host_name[:-1]
+    if host_name.endswith(BLOCKED_HOST_SUFFIXES):
+        raise UrlRejectedError("host_suffix")
+
+    normalized = str(parsed)
+    if len(normalized) > MAX_URL_LENGTH:
+        raise UrlRejectedError("length")
+    return normalized
+
+
+def _ip_literal(host: str) -> ipaddress.IPv4Address | ipaddress.IPv6Address | None:
+    """Return the ``ipaddress`` object of an IP literal host, else ``None``.
+
+    The host comes from Pydantic ``HttpUrl``, which brackets IPv6 literals
+    (``[::1]``). Only the standard library parses the address; an ordinary host
+    name raises ``ValueError`` and yields ``None``.
+    """
+    candidate = host[1:-1] if host.startswith("[") and host.endswith("]") else host
+    try:
+        return ipaddress.ip_address(candidate)
+    except ValueError:
+        return None
 
 
 async def resolve_redirect(
@@ -208,7 +262,67 @@ async def resolve_redirect(
     Never raises for these cases; only cancellation of the calling task
     propagates.
     """
-    raise NotImplementedError
+    try:
+        current = check_url(url)
+    except UrlRejectedError:
+        return None
+
+    start = httpx.URL(current)
+    if start.scheme != "https" or start.host not in REDIRECT_ALLOWLIST:
+        return None
+
+    try:
+        return await asyncio.wait_for(
+            _follow_redirects(current, transport=transport, limits=limits),
+            timeout=limits.per_url_timeout_seconds,
+        )
+    except TimeoutError, httpx.HTTPError:
+        return None
+
+
+async def _follow_redirects(
+    start: str,
+    *,
+    transport: httpx.AsyncBaseTransport | None,
+    limits: ResolutionLimits,
+) -> str | None:
+    """Follow allowlist redirects manually from the checked ``start`` URL.
+
+    Precondition: ``start`` passed :func:`check_url`, uses ``https`` and its
+    host is in :data:`REDIRECT_ALLOWLIST`; :func:`resolve_redirect` owns the
+    per-URL timeout around this coroutine. Only the status and ``Location``
+    header of each response are read; the body is never consumed.
+    """
+    timeout = httpx.Timeout(
+        limits.per_url_timeout_seconds,
+        connect=limits.connect_timeout_seconds,
+    )
+    async with httpx.AsyncClient(
+        transport=transport,
+        follow_redirects=False,
+        timeout=timeout,
+    ) as client:
+        current = start
+        hops = 0
+        while True:
+            async with client.stream("GET", current) as response:
+                status = response.status_code
+                location = response.headers.get("Location")
+            if status not in REDIRECT_STATUS_CODES or location is None:
+                return None
+
+            try:
+                target = check_url(urljoin(current, location))
+            except UrlRejectedError:
+                return None
+
+            target_url = httpx.URL(target)
+            if target_url.host not in REDIRECT_ALLOWLIST:
+                return target
+            if target_url.scheme != "https" or hops >= limits.max_redirects:
+                return None
+            hops += 1
+            current = target
 
 
 async def resolve_redirects(
@@ -240,4 +354,32 @@ async def resolve_redirects(
     Never raises for a failed resolution; only cancellation of the calling
     task propagates.
     """
-    raise NotImplementedError
+    distinct = list(dict.fromkeys(urls))
+    if not distinct:
+        return {}
+
+    semaphore = asyncio.Semaphore(limits.max_parallel)
+
+    async def resolve_one(candidate: str) -> str | None:
+        async with semaphore:
+            return await resolve_redirect(candidate, transport=transport, limits=limits)
+
+    tasks = [asyncio.create_task(resolve_one(candidate)) for candidate in distinct]
+    done: set[asyncio.Task[str | None]] = set()
+    pending: set[asyncio.Task[str | None]] = set(tasks)
+    try:
+        done, pending = await asyncio.wait(tasks, timeout=limits.budget_seconds)
+    finally:
+        for task in pending:
+            task.cancel()
+        if pending:
+            await asyncio.gather(*pending, return_exceptions=True)
+
+    results: dict[str, str | None] = {}
+    for candidate, task in zip(distinct, tasks, strict=True):
+        if task in done and not task.cancelled():
+            error = task.exception()
+            results[candidate] = None if error is not None else task.result()
+        else:
+            results[candidate] = None
+    return results
