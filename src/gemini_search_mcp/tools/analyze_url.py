@@ -34,9 +34,11 @@ of the provider answer reaches the client: the error is a
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from types import MappingProxyType
-from typing import Any, Literal, Self
+from typing import Any, Literal, Self, cast
 
 from gemini_search_mcp.provider import Retrieval, SearchProvider, Usage
+from gemini_search_mcp.tools.errors import InvalidInputError, ToolError, tool_error_from_exception
+from gemini_search_mcp.urlpolicy import UrlRejectedError, check_url
 
 QUESTION_MAX_LENGTH = 4000
 """Maximum length of the trimmed question in Unicode code points (``len(str)``)."""
@@ -130,7 +132,23 @@ class AnalyzeUrlInput:
     question: str
 
     def __post_init__(self) -> None:
-        raise NotImplementedError
+        url: object = self.url
+        if not isinstance(url, str):
+            raise InvalidInputError("url", "must be a string")
+        try:
+            normalized_url = check_url(url)
+        except UrlRejectedError as error:
+            raise ToolError("url_not_allowed") from error
+        question: object = self.question
+        if not isinstance(question, str):
+            raise InvalidInputError("question", "must be a string")
+        trimmed = question.strip()
+        if len(trimmed) < QUESTION_MIN_LENGTH:
+            raise InvalidInputError("question", "must not be empty")
+        if len(trimmed) > QUESTION_MAX_LENGTH:
+            raise InvalidInputError("question", "must have at most 4000 characters")
+        object.__setattr__(self, "url", normalized_url)
+        object.__setattr__(self, "question", trimmed)
 
     @classmethod
     def from_arguments(cls, arguments: Mapping[str, object]) -> Self:
@@ -152,7 +170,14 @@ class AnalyzeUrlInput:
             InvalidInputError: on a violated contract rule.
             ToolError: ``url_not_allowed`` when the URL fails the input check.
         """
-        raise NotImplementedError
+        if "url" not in arguments:
+            raise InvalidInputError("url", "is required")
+        if "question" not in arguments:
+            raise InvalidInputError("question", "is required")
+        return cls(
+            url=cast(str, arguments["url"]),
+            question=cast(str, arguments["question"]),
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -177,7 +202,11 @@ class AnalyzeUrlOutput:
         Exactly the keys ``answer``, ``url`` and ``retrieval_status``; the
         tool text content is the same object serialized as JSON.
         """
-        raise NotImplementedError
+        return {
+            "answer": self.answer,
+            "url": self.url,
+            "retrieval_status": self.retrieval_status,
+        }
 
 
 @dataclass(frozen=True, slots=True)
@@ -228,7 +257,19 @@ async def run_analyze_url(
 
     Cancellation (``asyncio.CancelledError``) propagates unmapped.
     """
-    raise NotImplementedError
+    try:
+        result = await provider.analyze_url(tool_input.url, tool_input.question)
+        url = select_retrieved_url(result.retrievals, tool_input.url)
+    except Exception as error:
+        mapped = tool_error_from_exception(error)
+        if mapped is error:
+            raise
+        raise mapped from error
+    return AnalyzeUrlToolResult(
+        output=AnalyzeUrlOutput(answer=result.answer, url=url),
+        usage=result.usage,
+        model=result.model,
+    )
 
 
 def select_retrieved_url(retrievals: Sequence[Retrieval], requested_url: str) -> str:
@@ -257,4 +298,16 @@ def select_retrieved_url(retrievals: Sequence[Retrieval], requested_url: str) ->
     Raises:
         ToolError: ``url_unsafe`` or ``url_unreachable`` as above.
     """
-    raise NotImplementedError
+    unsafe = False
+    for retrieval in retrievals:
+        try:
+            normalized = check_url(retrieval.url)
+        except UrlRejectedError:
+            continue
+        if normalized != requested_url:
+            continue
+        if retrieval.status == "retrieved":
+            return normalized
+        if retrieval.status == "unsafe":
+            unsafe = True
+    raise ToolError("url_unsafe" if unsafe else "url_unreachable")
