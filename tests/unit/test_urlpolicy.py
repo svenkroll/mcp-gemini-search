@@ -177,6 +177,24 @@ def test_ec5_cgnat_is_rejected_and_a_global_ipv4_is_allowed() -> None:
     assert check_input_url("https://8.8.8.8/path") == "https://8.8.8.8/path"
 
 
+def test_f1_multicast_and_reserved_ip_literals_are_rejected() -> None:
+    """F1: multicast and reserved literals are rejected, not only non-global ones.
+
+    On Python 3.14 ``ipaddress`` reports ``is_global=True`` for multicast
+    addresses, the IETF-reserved ``::7f00:1`` and NAT64-embedded non-global
+    IPv4, so the literal rule may not rely on ``is_global`` alone (ADR 0008
+    requires rejecting multicast and reserved IPv4/IPv6 ranges).
+    """
+    for url in (
+        "https://224.0.0.1/",
+        "https://[ff00::1]/",
+        "https://[::7f00:1]/",
+        "https://[64:ff9b::127.0.0.1]/",
+    ):
+        with pytest.raises(UrlPolicyError):
+            check_input_url(url)
+
+
 def test_ec6_local_host_names_are_rejected() -> None:
     """EC6: localhost, its suffixes, .local and .internal are rejected."""
     for url in (
