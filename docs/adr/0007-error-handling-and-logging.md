@@ -38,7 +38,7 @@ holding this JSON:
 | `url_not_allowed` | URL fails the input check from ADR 0008 | `URL is not allowed.` |
 | `url_unreachable` | Gemini could not retrieve the URL | `URL could not be retrieved.` |
 | `url_unsafe` | Gemini reports the URL as unsafe | `URL was rejected as unsafe.` |
-| `upstream_unavailable` | 429, transient 5xx or timeout after all retries | `Search backend is temporarily unavailable.` |
+| `upstream_unavailable` | 429 or transient 5xx after all retries, a timeout, a connection failure, or a failed automatic-continuation hop with one of these causes (not retried) | `Search backend is temporarily unavailable.` |
 | `upstream_error` | any other Gemini error | `Search backend returned an error.` |
 | `internal_error` | unexpected error in the server | `Internal error.` |
 

@@ -1,0 +1,38 @@
+{
+  "id": "int_url_statuses",
+  "status": "completed",
+  "model": "gemini-3.8-flash",
+  "steps": [
+    {
+      "type": "url_context_result",
+      "call_id": "call_url",
+      "result": [
+        {
+          "url": "https://example.com/success",
+          "status": "success"
+        },
+        {
+          "url": "https://example.com/unsafe",
+          "status": "unsafe"
+        },
+        {
+          "url": "https://example.com/error",
+          "status": "error"
+        },
+        {
+          "url": "https://example.com/unknown",
+          "status": "future_status"
+        }
+      ]
+    },
+    {
+      "type": "model_output",
+      "content": [
+        {
+          "type": "text",
+          "text": "Analysis."
+        }
+      ]
+    }
+  ]
+}

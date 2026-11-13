@@ -13,6 +13,7 @@ classifiers = [
     "Programming Language :: Python :: 3.14",
 ]
 dependencies = [
+    "google-genai==3.3.0",
     "pydantic==2.14.3",
     "pydantic-settings==2.16.2",
 ]

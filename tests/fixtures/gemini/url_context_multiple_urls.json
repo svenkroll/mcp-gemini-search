@@ -1,0 +1,30 @@
+{
+  "id": "int_url_multiple",
+  "status": "completed",
+  "model": "gemini-3.8-flash",
+  "steps": [
+    {
+      "type": "url_context_result",
+      "call_id": "call_url",
+      "result": [
+        {
+          "url": "https://example.com/requested",
+          "status": "success"
+        },
+        {
+          "url": "https://example.com/other",
+          "status": "error"
+        }
+      ]
+    },
+    {
+      "type": "model_output",
+      "content": [
+        {
+          "type": "text",
+          "text": "Analysis."
+        }
+      ]
+    }
+  ]
+}

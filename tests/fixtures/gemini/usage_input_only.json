@@ -1,0 +1,19 @@
+{
+  "id": "int_usage_input",
+  "status": "completed",
+  "model": "gemini-3.8-flash",
+  "steps": [
+    {
+      "type": "model_output",
+      "content": [
+        {
+          "type": "text",
+          "text": "Answer."
+        }
+      ]
+    }
+  ],
+  "usage": {
+    "total_input_tokens": 7
+  }
+}

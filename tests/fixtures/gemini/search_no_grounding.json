@@ -1,0 +1,16 @@
+{
+  "id": "int_search_plain",
+  "status": "completed",
+  "model": "gemini-3.8-flash",
+  "steps": [
+    {
+      "type": "model_output",
+      "content": [
+        {
+          "type": "text",
+          "text": "Only an answer."
+        }
+      ]
+    }
+  ]
+}

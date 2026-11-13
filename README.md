@@ -59,6 +59,19 @@ docs/                   ADRs, tech debt, additional documentation
 .github/workflows/      CI
 ```
 
+## Data protection
+
+- A Gemini API key of a project on the paid tier is required for operation. The
+  free tier may use content for product improvement; the paid tier does not.
+- Search Grounding stores prompt, context and output for 30 days.
+- The Interactions API stores every request for 55 days on the paid tier,
+  because the server keeps the default `store=true`.
+- Queries, URLs and questions therefore leave your machine and are retained by
+  Google.
+
+The reasoning is recorded in
+[ADR 0006](docs/adr/0006-gemini-integration.md).
+
 ## Documentation
 
 - Working rules: [`AGENTS.md`](AGENTS.md)

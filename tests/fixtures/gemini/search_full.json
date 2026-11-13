@@ -1,0 +1,56 @@
+{
+  "id": "int_search_full",
+  "status": "completed",
+  "model": "gemini-3.8-flash",
+  "steps": [
+    {
+      "type": "google_search_call",
+      "id": "call_1",
+      "arguments": {
+        "queries": ["first query", "second query"]
+      }
+    },
+    {
+      "type": "model_output",
+      "content": [
+        {
+          "type": "text",
+          "text": "First part with a citation. ",
+          "annotations": [
+            {
+              "type": "url_citation",
+              "url": "https://example.com/one",
+              "title": "One",
+              "start_index": 0,
+              "end_index": 10
+            }
+          ]
+        },
+        {
+          "type": "text",
+          "text": "Second part with another citation.",
+          "annotations": [
+            {
+              "type": "url_citation",
+              "url": "https://example.com/two",
+              "title": "Two",
+              "start_index": 0,
+              "end_index": 10
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "google_search_call",
+      "id": "call_2",
+      "arguments": {
+        "queries": ["third query"]
+      }
+    }
+  ],
+  "usage": {
+    "total_input_tokens": 11,
+    "total_output_tokens": 22
+  }
+}

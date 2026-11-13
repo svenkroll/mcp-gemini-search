@@ -39,3 +39,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - #3: Ground-truth catalog format in `eval/cases/` with validator
   `eval/catalog.py`, example cases per category and `make eval-validate`
   (`STRICT=1` adds `--strict`).
+- #4: Asynchronous Gemini adapter in `gemini_client.py` implementing the
+  provider interface from ADR 0009 for Search Grounding and URL Context, with
+  the operating limits from ADR 0006 and fully testable offline. The adapter
+  pins the Gemini API version `v1` explicitly (ADR 0006).
+  HTTP errors of the real SDK client (`APIStatusError`, timeouts, connection
+  errors) are now mapped and retried as specified in ADR 0006 and ADR 0007.
+  `Retry-After` HTTP-dates are evaluated against an injectable wall clock, so
+  the branch is covered by offline tests.
+  A failed automatic-continuation hop is classified by its cause with the same
+  mapping as a direct error (`_classify`); a retryable cause is not retried.
