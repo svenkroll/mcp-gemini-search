@@ -5,14 +5,12 @@ static bearer token. It provides the tool `search` and the optional tool `analyz
 the Gemini Developer API. The yardstick is a correct, verifiable, and honest
 response for calling LLMs.
 
-This repository is in the **scaffolding stage (issue #1)**. It contains the
-project structure, quality tooling, and CI, but no tool, provider, or server
-implementation yet.
-
 ## Status
 
 - Tooling: `uv`, Ruff, `ty`, pytest with coverage, pre-commit, GitHub Actions.
-- `src/gemini_search_mcp/` contains documented placeholders only.
+- The MCP server (`search`, optional `analyze_url`) runs over stdio and
+  stateless Streamable HTTP. Bearer token enforcement for HTTP and the
+  container image are not part of the server yet.
 - Open tasks and deliberate debt are tracked in [`docs/techdebt.md`](docs/techdebt.md).
 
 ## Prerequisites
@@ -33,6 +31,92 @@ make install
 `make install` installs Python 3.14 and synchronizes all dependencies from the
 committed `uv.lock`.
 
+## Running the server
+
+The console script `gemini-search-mcp` reads its configuration exclusively from
+environment variables ([ADR 0010](docs/adr/0010-configuration.md)). If a
+required variable is missing or a rule is violated, it prints the variable name
+and the rule to stderr and exits with code 2 before opening a port.
+
+| Variable | Required | Default | Meaning |
+| --- | --- | --- | --- |
+| `GEMINI_API_KEY` | yes | | Gemini Developer API key |
+| `GEMINI_MODEL` | no | `gemini-3.8-flash` | Gemini model |
+| `GEMINI_TIMEOUT_SECONDS` | no | `60` | total timeout per Gemini call, 1 to 300 |
+| `GEMINI_MAX_CONCURRENCY` | no | `4` | parallel Gemini calls, 1 to 32 |
+| `GEMINI_MAX_RETRIES` | no | `2` | retries for 429 and transient 5xx, 0 to 5 |
+| `ANALYZE_URL_ENABLED` | no | `false` | register the `analyze_url` tool, see below |
+| `LOG_QUERIES` | no | `false` | add the query (for `analyze_url` the question, never the URL) to the log line |
+| `LOG_LEVEL` | no | `info` | `debug`, `info`, `warning` or `error` |
+| `MCP_TRANSPORT` | no | `stdio` | `stdio` or `http` |
+| `MCP_HOST` | no | `127.0.0.1` | bind address with `http` |
+| `MCP_PORT` | no | `8000` | port with `http`, 1 to 65535 |
+| `MCP_BEARER_TOKEN` | with `http` | | static bearer token, at least 32 characters |
+
+`.env.example` lists all variables as empty placeholders. The server does not
+read a `.env` file; export the variables in the environment of the process.
+
+### stdio
+
+stdio is the default and is meant for local clients. No port is opened and
+there are no health endpoints.
+
+```bash
+export GEMINI_API_KEY=<your key>
+uv run gemini-search-mcp
+```
+
+Example entry for an MCP client that starts the process itself:
+
+```json
+{
+  "mcpServers": {
+    "gemini-search": {
+      "command": "uv",
+      "args": ["run", "--directory", "/path/to/mcp-gemini-search", "gemini-search-mcp"],
+      "env": { "GEMINI_API_KEY": "<your key>" }
+    }
+  }
+}
+```
+
+### Streamable HTTP
+
+```bash
+export GEMINI_API_KEY=<your key>
+export MCP_TRANSPORT=http
+export MCP_BEARER_TOKEN=<at least 32 characters>
+uv run gemini-search-mcp
+```
+
+The token must be configured, but the server does not check it on requests yet
+(bearer authentication is a separate issue); do not expose the port publicly
+until it does.
+
+The MCP endpoint is `http://<MCP_HOST>:<MCP_PORT>/mcp`. It is stateless and
+serves MCP revision 2026-07-28 and older revisions on the same endpoint.
+`GET /health/live` and `GET /health/ready` answer 200 for Kubernetes; readiness
+never calls Gemini. A request with an `Origin` header that does not equal the
+scheme, host and port the server is reached at (including `null`) is answered
+with HTTP 403; requests without `Origin` are processed.
+
+### Logging
+
+Every tool call writes exactly one JSON line to stdout with `ts`, `level`,
+`event` (`tool_call`), `request_id`, `tool`, `status`, `error_code`,
+`duration_ms`, `model`, `input_tokens` and `output_tokens`; `query` appears only
+with `LOG_QUERIES=true`. A failed call with technical details adds one
+`error_detail` line with the same `request_id`. API keys and tokens are never
+logged ([ADR 0007](docs/adr/0007-error-handling-and-logging.md)).
+
+### `ANALYZE_URL_ENABLED`
+
+`search` is always available. `analyze_url` is registered only with
+`ANALYZE_URL_ENABLED=true`; by default it does not appear in `tools/list` and a
+call to it is answered as an unknown tool. Whether and when an agent may use it
+is decided per project, see
+[Using `analyze_url` in your project](#using-analyze_url-in-your-project).
+
 ## Local Checks
 
 | Target | Purpose |
@@ -50,7 +134,7 @@ threshold causes `make test` to fail.
 ## Structure
 
 ```text
-src/gemini_search_mcp/  Package (only placeholders so far)
+src/gemini_search_mcp/  Package: config, provider, Gemini adapter, URL policy, tools, server
 tests/unit/             Unit tests without network access
 tests/integration/      Integration tests
 tests/fixtures/         Controlled fixtures

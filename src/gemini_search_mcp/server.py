@@ -29,25 +29,51 @@ revision and ``2024-11-05`` to ``2025-11-25`` as handshake revisions; the
 Streamable HTTP endpoint serves both generations.
 """
 
+import asyncio
+import copy
+import json
 import logging
+import sys
+import time
+import uuid
 from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass
+from datetime import UTC, datetime
+from functools import partial
 from typing import Any, Literal, TextIO
+from urllib.parse import urlsplit
 
+import uvicorn
 from fastmcp import FastMCP
 from fastmcp.tools import Tool, ToolResult
 from fastmcp.tools.base import ToolAnnotations
 from pydantic import Field
 from pydantic.json_schema import SkipJsonSchema
 from starlette.applications import Starlette
+from starlette.middleware import Middleware
 from starlette.requests import Request
-from starlette.responses import Response
+from starlette.responses import JSONResponse, Response
+from starlette.routing import Route
 from starlette.types import ASGIApp, Receive, Scope, Send
 
-from gemini_search_mcp.config import LogLevel, Settings
+from gemini_search_mcp.config import LogLevel, Settings, load_settings_or_exit
+from gemini_search_mcp.gemini_client import GeminiProvider
 from gemini_search_mcp.provider import SearchProvider, Usage
-from gemini_search_mcp.tools.errors import ErrorCode, ToolError
-from gemini_search_mcp.tools.search import DEFAULT_REDIRECT_RESOLVER, RedirectResolver
+from gemini_search_mcp.tools.analyze_url import (
+    ANALYZE_URL_INPUT_SCHEMA,
+    ANALYZE_URL_OUTPUT_SCHEMA,
+    AnalyzeUrlInput,
+    run_analyze_url,
+)
+from gemini_search_mcp.tools.errors import ErrorCode, ToolError, tool_error_from_exception
+from gemini_search_mcp.tools.search import (
+    DEFAULT_REDIRECT_RESOLVER,
+    SEARCH_INPUT_SCHEMA,
+    SEARCH_OUTPUT_SCHEMA,
+    RedirectResolver,
+    SearchInput,
+    run_search,
+)
 
 SERVER_NAME = "gemini-search-mcp"
 """Name the server reports in the MCP handshake and server discovery."""
@@ -200,7 +226,27 @@ class ToolCallLogEntry:
         Never contains an API key, an authorization header, a bearer token or
         web content.
         """
-        raise NotImplementedError
+        fields: dict[str, Any] = {
+            "ts": self.ts,
+            "level": self.level,
+            "event": "tool_call",
+            "request_id": self.request_id,
+            "tool": self.tool,
+            "status": self.status,
+            "error_code": self.error_code,
+            "duration_ms": self.duration_ms,
+            "model": self.model,
+            "input_tokens": self.input_tokens,
+            "output_tokens": self.output_tokens,
+        }
+        if self.query is not None:
+            fields["query"] = self.query
+        return fields
+
+
+def _utc_timestamp() -> str:
+    """Return the current time as ISO 8601 UTC with offset ``+00:00``."""
+    return datetime.now(UTC).isoformat()
 
 
 def error_detail_fields(request_id: str, error: ToolError) -> dict[str, Any] | None:
@@ -216,7 +262,17 @@ def error_detail_fields(request_id: str, error: ToolError) -> dict[str, Any] | N
     e.g. ``"ProviderError"``). No exception message, input value, URL,
     secret or web content is included.
     """
-    raise NotImplementedError
+    cause = error.__cause__
+    if cause is None:
+        return None
+    return {
+        "ts": _utc_timestamp(),
+        "level": "error",
+        "event": "error_detail",
+        "request_id": request_id,
+        "error_code": error.code,
+        "error_type": type(cause).__name__,
+    }
 
 
 def success_result(success: ToolCallSuccess) -> ToolResult:
@@ -227,7 +283,8 @@ def success_result(success: ToolCallSuccess) -> ToolResult:
     ``json.dumps(success.structured_content, ensure_ascii=False)``, so
     ``json.loads(text) == structuredContent``; ``is_error`` is false.
     """
-    raise NotImplementedError
+    text = json.dumps(success.structured_content, ensure_ascii=False)
+    return ToolResult(content=text, structured_content=success.structured_content)
 
 
 def error_result(error: ToolError, request_id: str) -> ToolResult:
@@ -238,7 +295,7 @@ def error_result(error: ToolError, request_id: str) -> ToolResult:
     ``{"error": {"code", "message", "request_id"}}`` with the fixed message of
     the code; ``structured_content`` is ``None``.
     """
-    raise NotImplementedError
+    return ToolResult(content=json.dumps(error.to_payload(request_id)), is_error=True)
 
 
 async def call_search(
@@ -257,7 +314,13 @@ async def call_search(
         ToolError: as raised by ``SearchInput.from_arguments`` (``invalid_input``)
             or ``run_search`` (already mapped per ADR 0007).
     """
-    raise NotImplementedError
+    tool_input = SearchInput.from_arguments(arguments)
+    result = await run_search(tool_input, provider=provider, resolver=resolver)
+    return ToolCallSuccess(
+        structured_content=result.output.to_structured_content(),
+        usage=result.usage,
+        model=result.model,
+    )
 
 
 async def call_analyze_url(
@@ -276,7 +339,13 @@ async def call_analyze_url(
             (``invalid_input``, ``url_not_allowed``) or ``run_analyze_url``
             (already mapped per ADR 0007).
     """
-    raise NotImplementedError
+    tool_input = AnalyzeUrlInput.from_arguments(arguments)
+    result = await run_analyze_url(tool_input, provider=provider)
+    return ToolCallSuccess(
+        structured_content=result.output.to_structured_content(),
+        usage=result.usage,
+        model=result.model,
+    )
 
 
 class ContractTool(Tool):
@@ -328,7 +397,55 @@ class ContractTool(Tool):
         ``extra={"json_fields": ...}``. ``query`` is filled per
         :class:`ToolCallLogEntry`.
         """
-        raise NotImplementedError
+        request_id = str(uuid.uuid4())
+        started = time.monotonic()
+        tool_name: ToolName = "search" if self.name == "search" else "analyze_url"
+        query = self._logged_query(arguments)
+        logger = logging.getLogger(TOOL_CALL_LOGGER_NAME)
+
+        def entry(
+            status: ToolCallStatus,
+            error_code: ErrorCode | None = None,
+            success: ToolCallSuccess | None = None,
+        ) -> ToolCallLogEntry:
+            return ToolCallLogEntry(
+                ts=_utc_timestamp(),
+                level="error" if status == "error" else "info",
+                request_id=request_id,
+                tool=tool_name,
+                status=status,
+                error_code=error_code,
+                duration_ms=int((time.monotonic() - started) * 1000),
+                model=success.model if success is not None else self.default_model,
+                input_tokens=success.usage.input_tokens if success is not None else None,
+                output_tokens=success.usage.output_tokens if success is not None else None,
+                query=query,
+            )
+
+        try:
+            success = await self.handler(arguments)
+        except asyncio.CancelledError:
+            logger.info("tool_call", extra={"json_fields": entry("cancelled").to_log_fields()})
+            raise
+        except Exception as exc:
+            error = tool_error_from_exception(exc)
+            logger.error(
+                "tool_call",
+                extra={"json_fields": entry("error", error.code).to_log_fields()},
+            )
+            detail = error_detail_fields(request_id, error)
+            if detail is not None:
+                logger.error("error_detail", extra={"json_fields": detail})
+            return error_result(error, request_id)
+        logger.info("tool_call", extra={"json_fields": entry("ok", None, success).to_log_fields()})
+        return success_result(success)
+
+    def _logged_query(self, arguments: Mapping[str, object]) -> str | None:
+        """Return the argument to log as ``query``, or ``None`` when it must not be logged."""
+        if not self.log_queries:
+            return None
+        value = arguments.get(self.query_argument)
+        return value if isinstance(value, str) else None
 
 
 def build_server(
@@ -357,7 +474,45 @@ def build_server(
 
     Opens no port, reads no environment variable and contacts no provider.
     """
-    raise NotImplementedError
+    server = FastMCP(
+        name=SERVER_NAME,
+        instructions=SERVER_INSTRUCTIONS,
+        mask_error_details=True,
+    )
+    server.add_tool(
+        ContractTool(
+            name="search",
+            title=SEARCH_TITLE,
+            description=SEARCH_DESCRIPTION,
+            parameters=copy.deepcopy(dict(SEARCH_INPUT_SCHEMA)),
+            output_schema=copy.deepcopy(dict(SEARCH_OUTPUT_SCHEMA)),
+            annotations=TOOL_ANNOTATIONS,
+            handler=partial(call_search, provider=provider, resolver=resolver),
+            log_queries=settings.log_queries,
+            default_model=settings.gemini_model,
+            query_argument="query",
+        )
+    )
+    if settings.analyze_url_enabled:
+        server.add_tool(
+            ContractTool(
+                name="analyze_url",
+                title=ANALYZE_URL_TITLE,
+                description=ANALYZE_URL_DESCRIPTION,
+                parameters=copy.deepcopy(dict(ANALYZE_URL_INPUT_SCHEMA)),
+                output_schema=copy.deepcopy(dict(ANALYZE_URL_OUTPUT_SCHEMA)),
+                annotations=TOOL_ANNOTATIONS,
+                handler=partial(call_analyze_url, provider=provider),
+                log_queries=settings.log_queries,
+                default_model=settings.gemini_model,
+                query_argument="question",
+            )
+        )
+    return server
+
+
+_DEFAULT_PORTS = {"http": 80, "https": 443}
+"""Port assumed for an ``Origin`` or ``Host`` without an explicit port, per scheme."""
 
 
 def is_origin_allowed(origin: str | None, *, scheme: str, host: str) -> bool:
@@ -378,7 +533,26 @@ def is_origin_allowed(origin: str | None, *, scheme: str, host: str) -> bool:
         an empty string, a value with a path, and a malformed value. Never
         raises.
     """
-    raise NotImplementedError
+    if origin is None:
+        return True
+    try:
+        parsed = urlsplit(origin)
+        origin_port = parsed.port
+        request = urlsplit(f"//{host}")
+        request_port = request.port
+    except ValueError:
+        return False
+    origin_scheme = parsed.scheme
+    if origin_scheme not in _DEFAULT_PORTS or parsed.hostname is None or request.hostname is None:
+        return False
+    if parsed.path or parsed.query or parsed.fragment or parsed.username or parsed.password:
+        return False
+    if origin_scheme != scheme.lower():
+        return False
+    default_port = _DEFAULT_PORTS[origin_scheme]
+    return parsed.hostname == request.hostname and (origin_port or default_port) == (
+        request_port or default_port
+    )
 
 
 class OriginGuardMiddleware:
@@ -397,12 +571,25 @@ class OriginGuardMiddleware:
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         """Apply the Origin check, see the class docstring."""
-        raise NotImplementedError
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+        headers = dict(scope["headers"])
+        origin = headers.get(b"origin")
+        allowed = is_origin_allowed(
+            origin.decode("latin-1") if origin is not None else None,
+            scheme=scope["scheme"],
+            host=headers.get(b"host", b"").decode("latin-1"),
+        )
+        if not allowed:
+            await Response("Forbidden", status_code=403)(scope, receive, send)
+            return
+        await self.app(scope, receive, send)
 
 
 async def health_live(request: Request) -> Response:
     """``GET /health/live``: HTTP 200 while the process serves requests."""
-    raise NotImplementedError
+    return JSONResponse({"status": "ok"})
 
 
 async def health_ready(request: Request) -> Response:
@@ -410,7 +597,7 @@ async def health_ready(request: Request) -> Response:
 
     Never calls Gemini or any other network service (ADR 0002, ADR 0010).
     """
-    raise NotImplementedError
+    return JSONResponse({"status": "ok"})
 
 
 def build_http_app(server: FastMCP) -> Starlette:
@@ -431,7 +618,19 @@ def build_http_app(server: FastMCP) -> Starlette:
 
     Opens no port.
     """
-    raise NotImplementedError
+    app = server.http_app(
+        path=MCP_PATH,
+        stateless_http=True,
+        host_origin_protection=False,
+        middleware=[Middleware(OriginGuardMiddleware)],
+    )
+    app.router.routes.extend(
+        [
+            Route(HEALTH_LIVE_PATH, health_live, methods=["GET"]),
+            Route(HEALTH_READY_PATH, health_ready, methods=["GET"]),
+        ]
+    )
+    return app
 
 
 class JsonLogFormatter(logging.Formatter):
@@ -449,7 +648,21 @@ class JsonLogFormatter(logging.Formatter):
 
     def format(self, record: logging.LogRecord) -> str:
         """Return the JSON line for ``record`` without a trailing newline."""
-        raise NotImplementedError
+        json_fields = getattr(record, "json_fields", None)
+        if json_fields is not None:
+            return json.dumps(json_fields)
+        message = record.getMessage()
+        if record.exc_info:
+            message = f"{message}\n{self.formatException(record.exc_info)}"
+        return json.dumps(
+            {
+                "ts": datetime.fromtimestamp(record.created, UTC).isoformat(),
+                "level": record.levelname.lower(),
+                "event": "log",
+                "logger": record.name,
+                "message": message,
+            }
+        )
 
 
 def configure_logging(level: LogLevel, stream: TextIO | None = None) -> None:
@@ -467,7 +680,14 @@ def configure_logging(level: LogLevel, stream: TextIO | None = None) -> None:
 
     Calling it again replaces the previous configuration (idempotent).
     """
-    raise NotImplementedError
+    handler = logging.StreamHandler(stream if stream is not None else sys.stdout)
+    handler.setFormatter(JsonLogFormatter())
+    root = logging.getLogger()
+    for existing in list(root.handlers):
+        root.removeHandler(existing)
+    root.addHandler(handler)
+    root.setLevel(level.upper())
+    logging.getLogger(TOOL_CALL_LOGGER_NAME).setLevel(logging.INFO)
 
 
 def main() -> None:
@@ -490,4 +710,15 @@ def main() -> None:
 
     Never prints or logs ``GEMINI_API_KEY`` or ``MCP_BEARER_TOKEN``.
     """
-    raise NotImplementedError
+    settings = load_settings_or_exit()
+    configure_logging(settings.log_level)
+    server = build_server(settings, GeminiProvider(settings))
+    if settings.mcp_transport == "stdio":
+        server.run(transport="stdio", show_banner=False)
+    else:
+        uvicorn.run(
+            build_http_app(server),
+            host=settings.mcp_host,
+            port=settings.mcp_port,
+            log_config=None,
+        )
