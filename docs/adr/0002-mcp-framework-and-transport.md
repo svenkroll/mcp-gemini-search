@@ -40,6 +40,8 @@ Additional requirements for revision 2026-07-28:
   processed normally.
 - Both tools carry annotations (`readOnlyHint: true`, `openWorldHint: true`,
   `idempotentHint: true`) and a `title`; `tools/list` returns a stable order.
+  With `ANALYZE_URL_ENABLED=false` (the default, ADR 0010) `analyze_url` is
+  not registered and `tools/list` contains only `search`.
 - Tool calls are safe to repeat, because clients re-send interrupted requests
   instead of resuming a stream. A repeated call consumes Gemini quota again.
 - Reverse proxies (Caddy, Traefik, HAProxy) pass `MCP-Protocol-Version`,

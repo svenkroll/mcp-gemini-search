@@ -30,6 +30,7 @@ variables; no other module reads the environment directly.
 | `GEMINI_TIMEOUT_SECONDS` | no | `60` | 1 to 300 |
 | `GEMINI_MAX_CONCURRENCY` | no | `4` | 1 to 32 |
 | `GEMINI_MAX_RETRIES` | no | `2` | 0 to 5 |
+| `ANALYZE_URL_ENABLED` | no | `false` | boolean; `false` means `analyze_url` is not registered (ADR 0004) |
 | `LOG_QUERIES` | no | `false` | boolean |
 | `LOG_LEVEL` | no | `info` | `debug`, `info`, `warning`, `error` |
 | `MCP_TRANSPORT` | no | `stdio` | `stdio` or `http` |

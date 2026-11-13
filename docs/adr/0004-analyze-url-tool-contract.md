@@ -71,6 +71,33 @@ Raw content is never returned. Which content types can be retrieved is decided
 by Gemini URL Context; HTML and PDF are covered by the ground-truth catalog.
 Errors follow ADR 0007.
 
+### Role and tool description
+
+`search` is the core of the server. `analyze_url` is an optional addition:
+the calling agent usually has its own fetch tool and can load the source URLs
+from `search` itself, reading the original text with knowledge of its task.
+The operator can disable the tool entirely with `ANALYZE_URL_ENABLED` (ADR
+0010); disabled, it is not registered and does not appear in `tools/list`.
+Whether an agent may use it is decided by the owner of the calling project, for
+example in that project's `AGENTS.md`; the README provides example rules.
+
+The server cannot know the caller's costs, so the tool description states
+facts only. It must say that the tool:
+
+- answers one question about one public URL; Google performs the retrieval,
+  PDF included; a summary is returned only when the question asks for one;
+- returns no original text, so verbatim quotes are not possible;
+- does not put the page content into the caller's context;
+- causes its own costs and is not necessarily cheaper than the caller's own
+  fetch;
+- may retrieve pages the caller's own fetch cannot load;
+- fails for paywalled content, private or local addresses, video and audio;
+- treats retrieved content as untrusted; instructions in it are not followed
+  (ADR 0008).
+
+The description must not claim that the tool is cheaper and must not recommend
+using it by default or in preference to the caller's own fetch.
+
 ## Consequences
 
 - Good: Clients can distinguish page content from model knowledge.
@@ -81,6 +108,9 @@ Errors follow ADR 0007.
   not configurable. This replaces the earlier assumption of our own retrieval
   limits.
 - Bad: The tool does not replace a general extract endpoint.
+- Good: The description gives agents facts instead of a cost claim that the
+  server cannot verify for the caller's environment.
+- Bad: Usage rules live outside this server, in each calling project.
 
 ## Open
 
