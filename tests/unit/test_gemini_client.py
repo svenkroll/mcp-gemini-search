@@ -347,6 +347,109 @@ def test_f1_continuation_interrupted_by_timeout_maps_to_unavailable() -> None:
     assert len(fake.calls) == 1
 
 
+def _interrupted(cause: BaseException) -> ContinuationInterruptedError:
+    """Build the error the SDK raises for a failed continuation hop (``raise ... from``)."""
+    try:
+        try:
+            raise cause
+        except Exception as error:
+            raise ContinuationInterruptedError(
+                "Automatic continuation was interrupted after 1 completed hop(s).",
+                continuation_token="token",  # noqa: S106 - fixture value, not a secret
+            ) from error
+    except ContinuationInterruptedError as interrupted:
+        return interrupted
+    raise AssertionError("unreachable")
+
+
+def _transport_request() -> httpx.Request:
+    return httpx.Request("POST", "https://gemini.invalid/v1/interactions")
+
+
+@pytest.mark.parametrize(
+    ("make_cause", "kind"),
+    [
+        (lambda: _api_error(429), "unavailable"),
+        (lambda: _api_error(503), "unavailable"),
+        (lambda: _api_error(400), "rejected"),
+        (lambda: _api_error(404), "rejected"),
+        (lambda: _api_error(501), "internal"),
+        (lambda: APIConnectionError(request=_transport_request()), "unavailable"),
+        (lambda: APITimeoutError(request=_transport_request()), "unavailable"),
+        (lambda: ContinuationTimeoutError("deadline"), "unavailable"),
+        (lambda: ValueError("unexpected"), "internal"),
+    ],
+)
+def test_continuation_cause_is_classified_like_a_direct_error(make_cause: Any, kind: str) -> None:
+    """A failed continuation hop maps like the same failure on the direct path.
+
+    A retryable cause (429, transient 5xx) is not retried: the earlier hops are
+    already billed and a retry would restart the whole interaction.
+    """
+    sleeper = _Sleeper()
+    provider, fake = _provider([_interrupted(make_cause())], sleeper=sleeper)
+
+    with pytest.raises(ProviderError) as raised:
+        asyncio.run(provider.search("query"))
+
+    assert raised.value.kind == kind
+    assert len(fake.calls) == 1
+    assert sleeper.delays == []
+
+
+def test_continuation_interrupted_without_cause_maps_to_internal() -> None:
+    """A continuation error that carries no cause cannot be classified: internal."""
+    provider, fake = _provider([ContinuationInterruptedError("interrupted")])
+
+    with pytest.raises(ProviderError) as raised:
+        asyncio.run(provider.search("query"))
+
+    assert raised.value.kind == "internal"
+    assert len(fake.calls) == 1
+
+
+@pytest.mark.parametrize(
+    ("make_error", "expected"),
+    [
+        (lambda: TimeoutError("t"), "unavailable"),
+        (lambda: ContinuationTimeoutError("t"), "unavailable"),
+        (lambda: APITimeoutError(request=_transport_request()), "unavailable"),
+        (lambda: APIConnectionError(request=_transport_request()), "unavailable"),
+        (lambda: _api_error(429), "retryable"),
+        (lambda: _api_error(500), "retryable"),
+        (lambda: _api_error(502), "retryable"),
+        (lambda: _api_error(503), "retryable"),
+        (lambda: _api_error(504), "retryable"),
+        (lambda: _api_error(400), "rejected"),
+        (lambda: _api_error(401), "rejected"),
+        (lambda: _api_error(403), "rejected"),
+        (lambda: _api_error(404), "rejected"),
+        (lambda: _api_error(499), "rejected"),
+        (lambda: _api_error(501), "internal"),
+        (lambda: _api_error(505), "internal"),
+        (
+            lambda: APIStatusError.generate(
+                200, {}, None, httpx.Response(200, request=_transport_request())
+            ),
+            "internal",
+        ),
+        (lambda: ValueError("x"), "internal"),
+        (lambda: RuntimeError("x"), "internal"),
+    ],
+)
+def test_classify_covers_every_row_of_the_error_mapping(make_error: Any, expected: str) -> None:
+    """_classify is the single source of the mapping of ADR 0007."""
+    assert GeminiProvider._classify(make_error()) == expected
+
+
+def test_classify_treats_a_missing_status_code_as_internal() -> None:
+    """An APIStatusError without a status_code is unknown and maps to internal."""
+    error = _api_error(429)
+    error.status_code = None  # type: ignore[assignment]  # simulates a missing status
+
+    assert GeminiProvider._classify(error) == "internal"
+
+
 def test_ac6_more_calls_than_max_concurrency_wait() -> None:
     """AC6: calls above GEMINI_MAX_CONCURRENCY wait for a free permit."""
 

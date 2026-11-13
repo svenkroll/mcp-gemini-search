@@ -46,7 +46,7 @@ import time
 from collections.abc import Awaitable, Callable
 from datetime import UTC
 from email.utils import parsedate_to_datetime
-from typing import Any, Protocol, cast
+from typing import Any, Literal, Protocol, cast
 
 from google import genai
 from google.genai import interactions, types
@@ -103,6 +103,9 @@ _URL_CONTEXT_TOOL: dict[str, str] = {"type": "url_context"}
 
 _RETRYABLE_STATUS_CODES: frozenset[int] = frozenset({429, 500, 502, 503, 504})
 """HTTP statuses that are retried: 429 and the transient 5xx (ADR 0006)."""
+
+ErrorClass = Literal["retryable", "unavailable", "rejected", "internal"]
+"""Classification of one failure by :meth:`GeminiProvider._classify`."""
 
 _RETRY_BACKOFF_BASE_SECONDS: float = 1.0
 """Base of the exponential backoff (ADR 0006).
@@ -362,20 +365,23 @@ class GeminiProvider:
            - with a missing or unparseable ``Retry-After``, wait
              :meth:`_backoff_seconds` (exponential backoff with jitter),
              again capped at the remaining budget.
-        6. Outcome mapping:
+        6. Outcome mapping, defined once in :meth:`_classify`:
            - budget exhausted, attempts exhausted after retryable errors, a
-             ``Retry-After`` beyond the budget, or the SDK's
-             ``ContinuationInterruptedError`` wrapping a ``TimeoutError``
-             (per-call timeout after continuation progress):
-             ``ProviderError("unavailable")``;
-           - a transport timeout or connection failure
-             (``APITimeoutError``, ``APIConnectionError``): not retried,
-             ``ProviderError("unavailable")``;
+             ``Retry-After`` beyond the budget, a ``TimeoutError`` or a
+             transport timeout or connection failure (``APITimeoutError``,
+             ``APIConnectionError``): ``ProviderError("unavailable")``, the
+             latter two without a retry;
            - a non-retryable HTTP error with a status from 400 to 499:
              ``ProviderError("rejected")``;
            - any other HTTP error (5xx outside the retryable set, unknown or
              missing status) and every other exception:
              ``ProviderError("internal")``.
+        7. The SDK's ``ContinuationInterruptedError`` (a hop failed after
+           earlier hops produced and billed output) is classified by its
+           ``__cause__`` with the same mapping. A retryable cause maps to
+           ``"unavailable"`` without a retry, because a retry would restart
+           the whole interaction from scratch; a missing cause is
+           ``"internal"``.
 
         Returns:
             The ``Interaction`` of the first successful attempt.
@@ -413,32 +419,33 @@ class GeminiProvider:
                     )
                 except asyncio.CancelledError:
                     raise
-                except TimeoutError:
-                    raise ProviderError("unavailable") from None
-                except APITimeoutError, APIConnectionError:
-                    raise ProviderError("unavailable") from None
-                except APIStatusError as error:
-                    status = error.status_code or 0  # unknown maps to internal
-                    if status not in _RETRYABLE_STATUS_CODES:
-                        if 400 <= status < 500:
-                            raise ProviderError("rejected") from None
-                        raise ProviderError("internal") from None
+                except ContinuationInterruptedError as interrupted:
+                    # Earlier hops are already billed, so a retry would restart
+                    # the whole interaction: a retryable cause is not retried.
+                    cause = interrupted.__cause__
+                    kind = self._classify(cause) if cause is not None else "internal"
+                    raise ProviderError("unavailable" if kind == "retryable" else kind) from None
+                except Exception as error:
+                    kind = self._classify(error)
+                    if kind != "retryable":
+                        raise ProviderError(kind) from None
 
+                    status_error = cast(APIStatusError, error)
                     retry += 1
                     if retry >= attempts:
                         logger.warning(
                             "gemini request failed: status=%s attempts=%d",
-                            status,
+                            status_error.status_code,
                             retry,
                         )
                         raise ProviderError("unavailable") from None
 
                     logger.warning(
                         "gemini request failed: status=%s attempt=%d, retrying",
-                        status,
+                        status_error.status_code,
                         retry,
                     )
-                    retry_after = self._retry_after_seconds(error)
+                    retry_after = self._retry_after_seconds(status_error)
                     if retry_after is not None:
                         if retry_after > deadline - self._now():
                             raise ProviderError("unavailable") from None
@@ -449,14 +456,35 @@ class GeminiProvider:
                             max(deadline - self._now(), 0.0),
                         )
                     await self._sleep(delay)
-                except ContinuationInterruptedError as error:
-                    if isinstance(error.__cause__, TimeoutError):
-                        raise ProviderError("unavailable") from None
-                    raise ProviderError("internal") from None
-                except Exception:
-                    raise ProviderError("internal") from None
         finally:
             self._semaphore.release()
+
+    @staticmethod
+    def _classify(error: BaseException) -> ErrorClass:
+        """Classify one failure; the single source of the error mapping (ADR 0007).
+
+        - ``TimeoutError`` (including ``ContinuationTimeoutError``),
+          ``APITimeoutError`` and ``APIConnectionError``: ``"unavailable"``;
+        - ``APIStatusError`` whose ``status_code`` is in
+          :data:`_RETRYABLE_STATUS_CODES`: ``"retryable"``;
+        - any other ``APIStatusError`` with a status from 400 to 499:
+          ``"rejected"``;
+        - everything else, including a missing ``status_code``:
+          ``"internal"``.
+
+        ``asyncio.CancelledError`` is never classified; :meth:`_send` lets it
+        propagate. The caller decides what ``"retryable"`` means: the direct
+        path retries, the continuation path does not (see :meth:`_send`).
+        """
+        if isinstance(error, TimeoutError | APITimeoutError | APIConnectionError):
+            return "unavailable"
+        if isinstance(error, APIStatusError):
+            status = error.status_code or 0
+            if status in _RETRYABLE_STATUS_CODES:
+                return "retryable"
+            if 400 <= status < 500:
+                return "rejected"
+        return "internal"
 
     def _interactions_client(self) -> InteractionsClient:
         """Return the boundary client, building the production one lazily."""

@@ -47,3 +47,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   errors) are now mapped and retried as specified in ADR 0006 and ADR 0007.
   `Retry-After` HTTP-dates are evaluated against an injectable wall clock, so
   the branch is covered by offline tests.
+  A failed automatic-continuation hop is classified by its cause with the same
+  mapping as a direct error (`_classify`); a retryable cause is not retried.
