@@ -1,7 +1,7 @@
 # Gemini Search MCP
 
 Gemini Search MCP is a personal, publicly reachable MCP server protected by a
-static bearer token. It provides two tools, `search` and `analyze_url`, backed by
+static bearer token. It provides the tool `search` and the optional tool `analyze_url`, backed by
 the Gemini Developer API. The yardstick is a correct, verifiable, and honest
 response for calling LLMs.
 
@@ -71,6 +71,60 @@ docs/                   ADRs, tech debt, additional documentation
 
 The reasoning is recorded in
 [ADR 0006](docs/adr/0006-gemini-integration.md).
+
+## Costs
+
+Operation runs on the paid tier of the Gemini Developer API, where every token
+is billed; there is no free token allowance. As of 2026-11-13:
+
+| Item | Through 2026-12-31 | From 2027-01-01 |
+| --- | --- | --- |
+| `gemini-3.8-flash` input, per 1M tokens | 0.75 USD | 1.50 USD |
+| `gemini-3.8-flash` output incl. thinking, per 1M tokens | 3.75 USD | 7.50 USD |
+| Google Search beyond 5,000 free requests per month, per 1,000 | 14 USD | 14 USD |
+
+- `search` is billed per search query the model executes, not per call; one
+  call can trigger several queries. At most 1,500 search requests per project
+  and day.
+- `analyze_url` has no tool fee, but the retrieved page is billed as input
+  tokens, so long pages and PDFs cost accordingly.
+
+Details, sources and open questions: [ADR 0006](docs/adr/0006-gemini-integration.md).
+
+## Using `analyze_url` in your project
+
+`search` is the core tool and returns source URLs your agent can load with its
+own fetch tool. `analyze_url` is optional and off by default; the operator
+enables it with `ANALYZE_URL_ENABLED=true`. It answers one question about one
+public URL, retrieved by Google. It returns no original text, keeps the page
+out of your agent's context, may load pages your own fetch cannot, and causes
+its own costs. Whether it is cheaper than your agent's own fetch depends on
+your setup; this server cannot know that ([ADR 0004](docs/adr/0004-analyze-url-tool-contract.md)).
+
+Decide once per project and put one of these rules into its `AGENTS.md`:
+
+- Allowed:
+
+  ```markdown
+  You may use the `analyze_url` tool of the gemini-search MCP server whenever
+  answering a question about a web page or PDF is enough and no verbatim quote
+  is needed.
+  ```
+
+- Not allowed:
+
+  ```markdown
+  Do not use the `analyze_url` tool of the gemini-search MCP server. Load web
+  pages and PDFs with your own fetch tool.
+  ```
+
+- Fallback only:
+
+  ```markdown
+  Load web pages and PDFs with your own fetch tool first. Use the `analyze_url`
+  tool of the gemini-search MCP server only when your own fetch fails or is
+  blocked, and say in your answer that the content came from `analyze_url`.
+  ```
 
 ## Documentation
 

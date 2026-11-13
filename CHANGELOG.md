@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- `analyze_url` becomes optional: `search` is the core tool, ADR 0004 defines
+  the role and the facts the tool description must state, without cost claims
+  or a default recommendation.
+- ADR 0006 records Gemini pricing as of 2026-11-13, including the price change
+  on 2027-01-01, per-query billing of Google Search and URL Context billed as
+  input tokens.
+- Configuration errors report "must be a boolean" for every boolean variable.
 - Tickets moved from `tickets/` to GitHub issues (#2 to #14), with an issue
   template and evidence types per acceptance criterion.
 - ADRs revised and translated to English (new file names), ADR 0010 for
@@ -20,6 +27,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `ANALYZE_URL_ENABLED` (default `false`) controls whether `analyze_url` is
+  registered (ADR 0010).
+- README sections on costs and on example `AGENTS.md` rules for `analyze_url`.
 - `make test-fast` runs the full suite without the coverage threshold.
 - `docs/roadmap.md` for topics deliberately outside release 1.
 

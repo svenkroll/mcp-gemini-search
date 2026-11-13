@@ -44,6 +44,12 @@ expected_outcome: answer
 draft: true
 ```
 
+## `analyze_url` Cases
+
+`analyze_url` is not registered by default (ADR 0004, ADR 0010). Evaluation runs
+that include the `url_html`, `url_pdf` and `url_failure` categories must set
+`ANALYZE_URL_ENABLED=true`.
+
 ## Categories and Minimum Distribution
 
 | Category | Content | Minimum |
