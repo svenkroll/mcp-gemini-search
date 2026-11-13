@@ -1,6 +1,6 @@
 ---
 status: proposed
-date: 2026-11-10
+date: 2026-11-13
 decision-makers: Sven Kroll
 ---
 
@@ -17,12 +17,20 @@ the goal; this server's quality is measured against fixed limits.
 
 1. Assess quality only through manual spot checks.
 2. Create an evaluation catalog only after implementation.
-3. A versioned catalog, a simple evaluation script, a calibrated judge and
-   fixed thresholds.
+3. A versioned catalog, a simple evaluation script, an LLM judge calibrated
+   against manual verdicts, and fixed thresholds.
+4. A versioned catalog, a simple evaluation script with automatic checks,
+   manual scoring by the project owner for everything else, and fixed
+   thresholds.
 
 ## Decision
 
-**Option 3**.
+**Option 4**.
+
+Option 3 was the original decision and is replaced (see "More Information").
+With a catalog of about 40 cases, scoring by hand costs less than building,
+calibrating and maintaining a judge, and the calibration itself already
+required the project owner to score a third of the catalog by hand.
 
 ### Catalog
 
@@ -60,11 +68,11 @@ unit tests (ADR 0008).
 
 A single script (`eval/run_eval.py`, no evaluation framework) starts the server
 via stdio and calls the tools over MCP, so it measures exactly what a client
-receives. It stores results under `eval/runs/<date>-<name>/` and scores them
-with the pinned judge `gemini-3.7-flash` and the versioned prompt
-`eval/judge_prompt.md`. Whatever can be checked without an LLM (error code,
-source domain, no redirect URL) the script checks itself. Binary verdicts per
-case:
+receives. It stores results under `eval/runs/<date>-<name>/`. There is no
+LLM judge. Whatever can be checked without an LLM (error code, source domain,
+no redirect URL) the script checks itself. All other verdicts are scored by
+the project owner by hand in a review file the script writes; a second command
+computes rates and go/no-go from the completed file. Binary verdicts per case:
 
 | Metric | passes when |
 | --- | --- |
@@ -73,13 +81,17 @@ case:
 | Source quality | every returned source is a real target URL within `allowed_sources` |
 | Honesty | for `honest_unknown`, no invented answer |
 
-Metrics that do not apply to a case are recorded as `n/a` and do not count in
-the denominator. Latency (p50, p95) and tokens are recorded but are not a
-blocking threshold.
+| Metric | `answer` | `honest_unknown` | `error:<code>` |
+| --- | --- | --- | --- |
+| Correctness | manual | `n/a` | automatic |
+| Groundedness | manual | `n/a` | `n/a` |
+| Source quality | automatic | automatic, `n/a` without sources | `n/a` |
+| Honesty | `n/a` | manual | `n/a` |
 
-Calibration: the project owner scores at least twelve cases across categories
-by hand. More than one diverging core verdict requires revising the prompt or
-rubric and calibrating again.
+An `answer` case that returns a tool error fails correctness and groundedness
+automatically. Metrics that do not apply to a case are recorded as `n/a` and
+do not count in the denominator. Latency (p50, p95) and tokens are recorded
+but are not a blocking threshold.
 
 ### Go/No-Go
 
@@ -90,8 +102,12 @@ least 85 %. Thresholds are never relaxed after a result.
 
 - Good: Quality decides before architectural aesthetics.
 - Good: Runs are reproducible and comparable with each other.
-- Bad: Maintaining the catalog and calibrating need deliberate work by the
-  project owner.
+- Good: No judge prompt, judge model or calibration to maintain; verdicts are
+  made by the person who defined `expected`.
+- Bad: Maintaining the catalog and scoring every run by hand need deliberate
+  work by the project owner.
+- Bad: Manual verdicts are subjective; the binary rubric above and the
+  `expected` core statement keep them comparable between runs.
 - Bad: Live runs cost money and therefore never run in CI.
 
 ## Open
@@ -100,4 +116,6 @@ Recurring live evaluations are not part of release 1 (`docs/roadmap.md`).
 
 ## More Information
 
+- Changes: 2026-11-13, LLM judge and judge calibration replaced by manual
+  scoring (option 4); implemented by issue #10.
 - [PRD, section 6](../../PRD-gemini-search-mcp.md)

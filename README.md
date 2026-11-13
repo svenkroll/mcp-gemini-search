@@ -162,7 +162,7 @@ src/gemini_search_mcp/  Package: config, provider, Gemini adapter, URL policy, t
 tests/unit/             Unit tests without network access
 tests/integration/      Integration tests
 tests/fixtures/         Controlled fixtures
-eval/                   Ground-truth catalog and judge material
+eval/                   Ground-truth catalog and evaluation script
 docs/                   ADRs, tech debt, additional documentation
 .github/workflows/      CI
 ```

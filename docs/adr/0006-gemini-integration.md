@@ -32,7 +32,7 @@ retries follow the first attempt, with exponential backoff, jitter and respect
 for `Retry-After`. Client cancellation stops further work. Token figures come
 exclusively from the API usage metadata.
 
-Deployment, evaluation runs and the judge use an API key of a project with
+Deployment and evaluation runs use an API key of a project with
 active billing. Free usage is meant only for direct AI Studio experiments, not
 for the operated Search Grounding service. The README explains: free services
 may use content for product improvement, paid ones do not; with Search

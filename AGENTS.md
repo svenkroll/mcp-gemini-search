@@ -33,8 +33,8 @@ the orchestrator stops with `CONTRACT_INCOMPLETE`.
   `server`, `auth`, `observability`, `eval`, `container`, `ci`, `docs`, `deps`
 - **Not available in the sandbox:** Docker, a Gemini API key, network access to
   paid APIs. Container criteria are proven via CI, live runs are manual.
-- **Allowed live calls:** none by agents. Live evaluations, judge calibration
-  and end-to-end tests are run manually by the project owner.
+- **Allowed live calls:** none by agents. Live evaluations and end-to-end
+  tests are run manually by the project owner.
 
 ## Project Mission
 
@@ -108,7 +108,7 @@ contradicts the ADRs, the ADRs win.
   gets a test. Tests check observable behavior, not internal call counts or
   mock details.
 - Live Gemini calls happen only in explicitly manual steps (evaluation run,
-  judge calibration, end-to-end test), never in unit tests or CI.
+  end-to-end test), never in unit tests or CI.
 
 ## Documentation and Changes
 
