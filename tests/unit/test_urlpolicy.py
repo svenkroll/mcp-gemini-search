@@ -288,6 +288,30 @@ def test_ac6_stops_at_overall_budget() -> None:
     assert elapsed < 1.0
 
 
+# --- F1: malformed Location header -------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "location",
+    [
+        pytest.param("https:evil.com", id="scheme-without-slashes"),
+        pytest.param("https://[bad", id="unparsable-ipv6-literal"),
+    ],
+)
+def test_f1_malformed_location_header_is_unresolved(location: str) -> None:
+    """F1: a malformed Location on an allowlist redirect counts as unresolved."""
+    recorder = _Recorder(
+        {_allowlist_url("/start"): httpx.Response(302, headers={"Location": location})}
+    )
+
+    result = asyncio.run(
+        resolve_redirect(_allowlist_url("/start"), transport=httpx.MockTransport(recorder))
+    )
+
+    assert result is None
+    assert recorder.hosts == [ALLOWLIST_HOST]
+
+
 # --- EC1: URL length boundary -------------------------------------------------
 
 
