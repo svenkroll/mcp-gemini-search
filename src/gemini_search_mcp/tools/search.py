@@ -327,9 +327,10 @@ async def run_search(
             ``ProviderError`` ``unavailable`` -> ``upstream_unavailable``,
             ``rejected`` -> ``upstream_error``, ``internal`` ->
             ``internal_error``; anything else -> ``internal_error``. The
-            original exception is only available as ``__cause__``. A failure after
-    the provider returned a result carries that result's usage and model on the
-    error (:meth:`ToolError.with_response`).
+            original exception is only available as ``__cause__``.
+
+    A failure after the provider returned a result carries that result's usage
+    and model on the error (:meth:`ToolError.with_response`).
 
     Cancellation (``asyncio.CancelledError``) propagates unmapped.
     """

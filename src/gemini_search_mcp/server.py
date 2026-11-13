@@ -100,12 +100,15 @@ HTTP_CLIENT_LOGGER_NAMES = (
     "httpcore",
     "httpcore2",
     "google_genai",
+    "google.genai",
 )
 """Loggers of the HTTP client libraries and the Google GenAI SDK, capped at ``WARNING``.
 
 At ``INFO`` they log every request URL (resolved grounding redirects, Gemini
 requests), at ``DEBUG`` connection and header details; ADR 0007 never logs web
-content. Child loggers (``httpcore.connection``) inherit the cap.
+content, and the SDK's debug mode (``GOOGLE_GENAI_DEBUG``, logger
+``google.genai``) writes all request headers including the API key. Child
+loggers (``httpcore.connection``) inherit the cap.
 """
 
 ToolName = Literal["search", "analyze_url"]

@@ -10,7 +10,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - #31: The loggers of the HTTP client libraries and the Google GenAI SDK are
-  capped at `WARNING` independent of `LOG_LEVEL`, so request URLs (resolved
+  capped at `WARNING` independent of `LOG_LEVEL` (`httpx`, `httpx2`, `httpcore`,
+  `httpcore2`, `google_genai`, `google.genai`), so request URLs (resolved
   grounding redirects, Gemini requests) no longer appear in the log. The
   `tool_call` line of a call that ends with `url_unreachable` or `url_unsafe`
   after a Gemini response carries that response's token figures. ADR 0007
