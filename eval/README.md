@@ -2,9 +2,9 @@
 
 This directory holds the ground-truth catalog for evaluating the Gemini
 Search MCP server (ADR 0005). Cases live in `eval/cases/`, the format and
-validator in [`eval/catalog.py`](catalog.py). The evaluation script and judge
-material arrive with #10; this document covers the case format and how to
-maintain the catalog.
+validator in [`eval/catalog.py`](catalog.py), the evaluation script is
+[`eval/run_eval.py`](run_eval.py). This document covers the case format, how
+to maintain the catalog and how to run and score an evaluation.
 
 ## Case Format
 
@@ -113,3 +113,131 @@ warning: search-current-001.yaml: ground_truth_date: older than 90 days for a cu
 
 An empty `eval/cases/` directory is valid without `--strict` and fails with
 it because of the minimum distribution.
+
+## Running an Evaluation
+
+`eval/run_eval.py` sends every catalog case to the server over MCP (stdio, the
+console script `gemini-search-mcp`), applies the checks that need no LLM and
+writes a review file in which you score the remaining metrics by hand. There is
+no LLM judge. A second command computes the rates and the go/no-go result from
+the filled-in file. Only the project owner starts live runs.
+
+### Cost notice
+
+A run makes paid Gemini calls (ADR 0006). The Gemini Developer API needs a
+paid key with active billing; every `search` call can execute several billed
+Google Search queries on top of the token cost, and `analyze_url` input cost
+grows with page size. Prices and quotas are in ADR 0006. Start with a smoke run
+of two or three cases before the full run. `run` refuses to start unless
+`LIVE=1` and a non-empty `GEMINI_API_KEY` are set; it checks this before the
+server is started, so nothing is called otherwise. `make eval` does not set
+`LIVE`.
+
+### 1. Smoke run
+
+```bash
+LIVE=1 GEMINI_API_KEY=... uv run python eval/run_eval.py run --name smoke \
+  --case <search-case-id> --case <analyze-url-case-id>
+```
+
+- `--case <id>` is repeatable and restricts the run to the given cases; an
+  unknown id aborts before the server starts. Without `--case` all cases run.
+- `--name <name>` names the run directory (default `run`). Allowed characters:
+  letters, digits, `.`, `_` and `-`, starting with a letter or digit.
+- The catalog is validated with `--strict` first; drafts or a missing minimum
+  distribution abort the run before the server starts.
+- The server runs with your environment plus `MCP_TRANSPORT=stdio` and
+  `ANALYZE_URL_ENABLED=true`, so include at least one `analyze_url` case.
+- `make eval ARGS="--name smoke --case <id>"` does the same.
+
+### 2. Full run
+
+```bash
+LIVE=1 GEMINI_API_KEY=... uv run python eval/run_eval.py run
+```
+
+Without `--case` every catalog case runs. The full run and the go/no-go
+decision are tracked in #14.
+
+A single call that times out (180 seconds) or fails outside the error contract
+is recorded as failed and the run continues. If the server cannot be started or
+exits during the run, the run aborts with a message; the results of the cases
+that finished stay in `results.jsonl`.
+
+### 3. Manual scoring
+
+Open `review.md` of the run directory. It starts with the run data (commit,
+date, catalog hash, model reported by the server, settings without secrets) and
+an overview table with one row per case. Each case has a section
+`## Case <id>` with the question or URL, `expected`, `allowed_sources`, the
+answer, the returned sources and the automatic results.
+
+Which metrics you score depends on `expected_outcome`; everything else is
+`n/a` and does not count in the denominator:
+
+| `expected_outcome` | correctness | groundedness | source quality | honesty |
+| --- | --- | --- | --- | --- |
+| `answer` | manual | manual | automatic | `n/a` |
+| `honest_unknown` | `n/a` | `n/a` | automatic, `n/a` without sources | manual |
+| `error:<code>` | automatic | `n/a` | `n/a` | `n/a` |
+
+Automatic checks: an `error:<code>` case passes correctness when the returned
+error code equals the expected one; source quality passes when every returned
+source is within `allowed_sources` (a subdomain such as `www.rfc-editor.org`
+counts for `rfc-editor.org`) and none is a Google grounding redirect URL; an
+`answer` case that returns a tool error fails correctness and groundedness.
+
+For every manual metric the section has one verdict line, initially empty:
+
+```text
+- verdict correctness:
+- verdict groundedness:
+```
+
+Write `pass` or `fail` after the colon, optionally followed by a short note:
+
+```text
+- verdict correctness: pass
+- verdict groundedness: fail the cited page does not state the date
+```
+
+Only exactly `pass` and `fail` (lower case) are accepted; `Pass`, `pas`,
+`passed` or `pass,` are invalid. Judge correctness against `expected`, and
+groundedness by whether the returned evidence supports the core statement. Do
+not edit anything else in the file: headings of the form `## Case <id>` and the
+verdict lines are what `score` reads. Text inside code fences comes from the
+case, the web or the model and is ignored by `score`.
+
+### 4. Score
+
+```bash
+uv run python eval/run_eval.py score eval/runs/<date>-<name>
+```
+
+`score` reads `results.jsonl`, `run.json` and `review.md`, computes the rate per
+metric, p50/p95 latency and token totals, and writes `report.md` into the run
+directory. Go/no-go uses the thresholds of ADR 0005: honesty 100 %, source
+quality at least 90 %, correctness and groundedness at least 85 %; a rate
+exactly at a threshold meets it, and a metric whose cases are all `n/a` is
+shown as `n/a` and counts as not met. If any verdict is empty, misspelled,
+missing or duplicated, `score` fails, names every affected case and metric and
+writes no report; fix `review.md` and run it again. The exit code is 0 for
+both GO and NO-GO.
+
+### Where runs are stored
+
+Every run gets its own directory `eval/runs/<date>-<name>/` (for example
+`eval/runs/2026-11-13-smoke/`). An existing directory is never overwritten;
+choose another `--name` to run again on the same day.
+
+| File | Content |
+| --- | --- |
+| `results.jsonl` | One line per case: input, raw tool result or error JSON, automatic check results, latency, tokens |
+| `run.json` | Run data: commit, date, catalog hash, models, settings, case ids |
+| `server.log` | The server's JSON log lines (stderr), source of tokens and model per call |
+| `review.md` | Overview, run data and one section per case with the empty verdict lines you fill in |
+| `report.md` | Written by `score`: rates, go/no-go, latency and tokens |
+
+No file contains `GEMINI_API_KEY`, `MCP_BEARER_TOKEN` or any other secret; the
+run data lists only an allowlist of non-secret settings. Web content in the
+answers is untrusted, so check a run before sharing or committing it.

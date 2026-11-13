@@ -43,16 +43,29 @@ Invoke as ``uv run python eval/run_eval.py run|score ...``. Never writes
 produces.
 """
 
+import argparse
+import asyncio
+import hashlib
 import importlib.util
+import json
+import os
+import re
+import subprocess
 import sys
+import time
 from collections.abc import Callable, Mapping, Sequence
-from dataclasses import dataclass
+from contextlib import AsyncExitStack
+from dataclasses import asdict, dataclass
 from datetime import date
 from pathlib import Path
 from types import ModuleType
 from typing import Any, Literal
+from urllib.parse import urlsplit
 
-from fastmcp.client.transports import ClientTransport
+from fastmcp import Client
+from fastmcp.client.transports import ClientTransport, StdioTransport
+from mcp.shared.exceptions import MCPError
+from mcp.types import CONNECTION_CLOSED, REQUEST_TIMEOUT
 
 _EVAL_DIR = Path(__file__).resolve().parent
 _CATALOG_MODULE_NAME = "eval_catalog"
@@ -253,6 +266,63 @@ class ToolCallTelemetry:
     output_tokens: int | None = None
 
 
+def _int_or_none(value: Any) -> int | None:
+    """Return ``value`` when it is an ``int`` (not a ``bool``), else ``None``."""
+    return value if isinstance(value, int) and not isinstance(value, bool) else None
+
+
+def _is_str(value: Any) -> bool:
+    return isinstance(value, str)
+
+
+def _is_int(value: Any) -> bool:
+    return _int_or_none(value) is not None
+
+
+def _is_non_negative_int(value: Any) -> bool:
+    return _is_int(value) and value >= 0
+
+
+def _is_dict(value: Any) -> bool:
+    return isinstance(value, dict)
+
+
+def _is_str_list(value: Any) -> bool:
+    return isinstance(value, list) and all(isinstance(item, str) for item in value)
+
+
+def _is_str_dict(value: Any) -> bool:
+    return isinstance(value, dict) and all(
+        isinstance(key, str) and isinstance(item, str) for key, item in value.items()
+    )
+
+
+def _is_checks(value: Any) -> bool:
+    return (
+        isinstance(value, dict)
+        and set(value) == set(METRICS)
+        and all(status in ("pass", "fail", "n/a", "manual") for status in value.values())
+    )
+
+
+def _optional(accept: Callable[[Any], bool]) -> Callable[[Any], bool]:
+    """Return a predicate that accepts ``None`` or what ``accept`` accepts."""
+    return lambda value: value is None or accept(value)
+
+
+def _field(data: Mapping[str, Any], key: str, accept: Callable[[Any], bool]) -> Any:
+    """Return ``data[key]`` after checking it with ``accept``.
+
+    Raises:
+        ValueError: when the key is missing or the value is not accepted.
+    """
+    if key not in data:
+        raise ValueError(f"missing key {key!r}")
+    if not accept(data[key]):
+        raise ValueError(f"invalid value for key {key!r}")
+    return data[key]
+
+
 class ServerLogReader:
     """Reads the server's JSON log lines incrementally from a file.
 
@@ -263,7 +333,8 @@ class ServerLogReader:
 
     def __init__(self, path: Path) -> None:
         """Remember ``path``; reading starts at the beginning of the file."""
-        raise NotImplementedError
+        self.path = path
+        self._offset = 0
 
     def next_tool_call(self) -> ToolCallTelemetry | None:
         """Return the telemetry of the latest ``tool_call`` line since the last read.
@@ -275,7 +346,33 @@ class ServerLogReader:
         skipped. Returns ``None`` when no such line was appended. Never
         raises for malformed content.
         """
-        raise NotImplementedError
+        try:
+            with self.path.open("rb") as handle:
+                handle.seek(self._offset)
+                data = handle.read()
+        except OSError:
+            return None
+        end = data.rfind(b"\n")
+        if end < 0:
+            return None
+        self._offset += end + 1
+        latest: ToolCallTelemetry | None = None
+        for raw in data[:end].split(b"\n"):
+            try:
+                entry = json.loads(raw)
+            except ValueError:
+                continue
+            if not isinstance(entry, dict) or entry.get("event") != "tool_call":
+                continue
+            model = entry.get("model")
+            if not isinstance(model, str):
+                continue
+            latest = ToolCallTelemetry(
+                model=model,
+                input_tokens=_int_or_none(entry.get("input_tokens")),
+                output_tokens=_int_or_none(entry.get("output_tokens")),
+            )
+        return latest
 
 
 @dataclass(frozen=True, slots=True)
@@ -333,7 +430,7 @@ class CaseRecord:
         becomes JSON ``null``. ``CaseRecord.from_json_dict(r.to_json_dict())
         == r``.
         """
-        raise NotImplementedError
+        return asdict(self)
 
     @classmethod
     def from_json_dict(cls, data: Mapping[str, Any]) -> CaseRecord:
@@ -343,7 +440,29 @@ class CaseRecord:
             ValueError: when a key is missing or a value has the wrong type
                 or an unknown literal value.
         """
-        raise NotImplementedError
+        tool = _field(data, "tool", lambda value: value in ("search", "analyze_url"))
+        outcome = _field(
+            data, "outcome", lambda value: value in ("ok", "tool_error", "call_failed")
+        )
+        raw_checks = _field(data, "checks", _is_checks)
+        return cls(
+            id=_field(data, "id", _is_str),
+            tool=tool,
+            category=_field(data, "category", _is_str),
+            expected_outcome=_field(data, "expected_outcome", _is_str),
+            input=dict(_field(data, "input", _is_str_dict)),
+            expected=_field(data, "expected", _is_str),
+            allowed_sources=list(_field(data, "allowed_sources", _is_str_list)),
+            outcome=outcome,
+            structured_content=_field(data, "structured_content", _optional(_is_dict)),
+            error_json=_field(data, "error_json", _optional(_is_dict)),
+            failure=_field(data, "failure", _optional(_is_str)),
+            latency_ms=_field(data, "latency_ms", _is_non_negative_int),
+            input_tokens=_field(data, "input_tokens", _optional(_is_int)),
+            output_tokens=_field(data, "output_tokens", _optional(_is_int)),
+            model=_field(data, "model", _optional(_is_str)),
+            checks={metric: raw_checks[metric] for metric in METRICS},
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -376,7 +495,7 @@ class RunData:
 
     def to_json_dict(self) -> dict[str, Any]:
         """Return the JSON object of ``run.json``; keys are the attribute names."""
-        raise NotImplementedError
+        return asdict(self)
 
     @classmethod
     def from_json_dict(cls, data: Mapping[str, Any]) -> RunData:
@@ -385,7 +504,15 @@ class RunData:
         Raises:
             ValueError: when a key is missing or a value has the wrong type.
         """
-        raise NotImplementedError
+        return cls(
+            name=_field(data, "name", _is_str),
+            date=_field(data, "date", _is_str),
+            commit=_field(data, "commit", _is_str),
+            catalog_hash=_field(data, "catalog_hash", _is_str),
+            models=list(_field(data, "models", _is_str_list)),
+            settings=dict(_field(data, "settings", _is_str_dict)),
+            case_ids=list(_field(data, "case_ids", _is_str_list)),
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -462,7 +589,42 @@ def applicability(expected_outcome: str, *, has_sources: bool) -> dict[Metric, A
     Raises:
         ValueError: for any other ``expected_outcome``.
     """
-    raise NotImplementedError
+    if expected_outcome == "answer":
+        return {
+            "correctness": "manual",
+            "groundedness": "manual",
+            "source_quality": "automatic",
+            "honesty": "n/a",
+        }
+    if expected_outcome == "honest_unknown":
+        return {
+            "correctness": "n/a",
+            "groundedness": "n/a",
+            "source_quality": "automatic" if has_sources else "n/a",
+            "honesty": "manual",
+        }
+    if expected_outcome.startswith("error:") and len(expected_outcome) > len("error:"):
+        return {
+            "correctness": "automatic",
+            "groundedness": "n/a",
+            "source_quality": "n/a",
+            "honesty": "n/a",
+        }
+    raise ValueError(f"unknown expected_outcome {expected_outcome!r}")
+
+
+def _host(url: str) -> str | None:
+    """Return the lower-case host of ``url`` without a trailing dot, or ``None``."""
+    try:
+        host = urlsplit(url).hostname
+    except ValueError:
+        return None
+    return host.rstrip(".") if host else None
+
+
+def _within(host: str, domain: str) -> bool:
+    """Return whether ``host`` equals ``domain`` or is a subdomain of it."""
+    return host == domain or host.endswith("." + domain)
 
 
 def returned_sources(tool: str, structured_content: Mapping[str, Any] | None) -> list[str]:
@@ -472,7 +634,19 @@ def returned_sources(tool: str, structured_content: Mapping[str, Any] | None) ->
     order. ``analyze_url``: a one-element list with ``url`` (ADR 0004).
     ``None`` (no successful result) or missing fields: an empty list.
     """
-    raise NotImplementedError
+    if structured_content is None:
+        return []
+    if tool == "search":
+        entries = structured_content.get("sources")
+        if not isinstance(entries, list):
+            return []
+        return [
+            entry["url"]
+            for entry in entries
+            if isinstance(entry, dict) and isinstance(entry.get("url"), str)
+        ]
+    url = structured_content.get("url")
+    return [url] if isinstance(url, str) else []
 
 
 def is_grounding_redirect(url: str) -> bool:
@@ -482,7 +656,8 @@ def is_grounding_redirect(url: str) -> bool:
     :data:`GROUNDING_REDIRECT_HOSTS` or a subdomain of one of them. Never
     raises; an unparsable URL is not a redirect.
     """
-    raise NotImplementedError
+    host = _host(url)
+    return host is not None and any(_within(host, known) for known in GROUNDING_REDIRECT_HOSTS)
 
 
 def is_allowed_source(url: str, allowed_sources: Sequence[str]) -> bool:
@@ -494,7 +669,10 @@ def is_allowed_source(url: str, allowed_sources: Sequence[str]) -> bool:
     ``evilrfc-editor.org`` is not). False for a URL without a host or one
     that cannot be parsed. Never raises.
     """
-    raise NotImplementedError
+    host = _host(url)
+    if host is None:
+        return False
+    return any(_within(host, domain.lower().rstrip(".")) for domain in allowed_sources)
 
 
 def check_source_quality(
@@ -507,7 +685,10 @@ def check_source_quality(
     ``sources`` list passes (the rule holds for every returned source); the
     caller decides via :func:`applicability` whether the metric applies.
     """
-    raise NotImplementedError
+    for source in sources:
+        if not is_allowed_source(source, allowed_sources) or is_grounding_redirect(source):
+            return "fail"
+    return "pass"
 
 
 def check_error_code(
@@ -523,7 +704,14 @@ def check_error_code(
     Raises:
         ValueError: when ``expected_outcome`` does not start with ``error:``.
     """
-    raise NotImplementedError
+    prefix = "error:"
+    if not expected_outcome.startswith(prefix):
+        raise ValueError(f"expected_outcome {expected_outcome!r} is not an error outcome")
+    if outcome != "tool_error" or error_json is None:
+        return "fail"
+    error = error_json.get("error")
+    code = error.get("code") if isinstance(error, Mapping) else None
+    return "pass" if code == expected_outcome[len(prefix) :] else "fail"
 
 
 def automatic_checks(
@@ -548,7 +736,23 @@ def automatic_checks(
 
     Returns one entry per metric of :data:`METRICS`.
     """
-    raise NotImplementedError
+    decided = applicability(expected_outcome, has_sources=bool(sources))
+    checks: dict[Metric, MetricStatus] = {}
+    for metric in METRICS:
+        if decided[metric] == "n/a":
+            checks[metric] = "n/a"
+        elif decided[metric] == "manual":
+            checks[metric] = "manual"
+        elif metric == "source_quality":
+            checks[metric] = check_source_quality(sources, allowed_sources)
+        else:
+            checks[metric] = check_error_code(expected_outcome, outcome, error_json)
+    if outcome == "call_failed":
+        return {metric: "n/a" if status == "n/a" else "fail" for metric, status in checks.items()}
+    if expected_outcome == "answer" and outcome == "tool_error":
+        checks["correctness"] = "fail"
+        checks["groundedness"] = "fail"
+    return checks
 
 
 # --- run --------------------------------------------------------------------
@@ -562,7 +766,16 @@ def check_live_guard(environ: Mapping[str, str]) -> None:
             ``GEMINI_API_KEY`` is missing or empty after stripping
             whitespace. The message names the variable, never a value.
     """
-    raise NotImplementedError
+    if environ.get("LIVE") != "1":
+        raise EvalAbort(
+            "LIVE=1 is required: a run makes paid Gemini calls (ADR 0006); "
+            "nothing was started and no call was made"
+        )
+    if not environ.get("GEMINI_API_KEY", "").strip():
+        raise EvalAbort(
+            "GEMINI_API_KEY is empty or not set: a live run needs a Gemini API key; "
+            "nothing was started and no call was made"
+        )
 
 
 def load_strict_catalog(cases_dir: Path = CASES_DIR) -> list[Any]:
@@ -577,7 +790,15 @@ def load_strict_catalog(cases_dir: Path = CASES_DIR) -> list[Any]:
             drafts present); the message contains the text of every error
             finding.
     """
-    raise NotImplementedError
+    errors = [
+        finding
+        for finding in catalog.validate_catalog(cases_dir, strict=True)
+        if finding.severity == "error"
+    ]
+    if errors:
+        details = "\n".join(str(finding) for finding in errors)
+        raise EvalAbort(f"the catalog is not valid with --strict:\n{details}")
+    return catalog.load_catalog(cases_dir)
 
 
 def select_cases(cases: Sequence[Any], case_ids: Sequence[str]) -> list[Any]:
@@ -591,7 +812,14 @@ def select_cases(cases: Sequence[Any], case_ids: Sequence[str]) -> list[Any]:
         EvalAbort: when an id in ``case_ids`` is not in ``cases``; the message
             names every unknown id.
     """
-    raise NotImplementedError
+    if not case_ids:
+        return list(cases)
+    known = {case.id for case in cases}
+    unknown = sorted({case_id for case_id in case_ids if case_id not in known})
+    if unknown:
+        raise EvalAbort("unknown case id(s): " + ", ".join(unknown))
+    wanted = set(case_ids)
+    return [case for case in cases if case.id in wanted]
 
 
 def server_environment(environ: Mapping[str, str]) -> dict[str, str]:
@@ -600,7 +828,7 @@ def server_environment(environ: Mapping[str, str]) -> dict[str, str]:
     The overrides replace values already in ``environ``; ``environ`` itself is
     not modified.
     """
-    raise NotImplementedError
+    return {**environ, **SERVER_ENV_OVERRIDES}
 
 
 def stdio_transport(env: Mapping[str, str], log_path: Path) -> ClientTransport:
@@ -610,7 +838,9 @@ def stdio_transport(env: Mapping[str, str], log_path: Path) -> ClientTransport:
     without arguments, with environment ``env``, ``keep_alive=False`` and the
     server's stderr written to ``log_path``. Starts no process by itself.
     """
-    raise NotImplementedError
+    return StdioTransport(
+        command=SERVER_COMMAND, args=[], env=dict(env), keep_alive=False, log_file=log_path
+    )
 
 
 TransportFactory = Callable[[Mapping[str, str], Path], ClientTransport]
@@ -629,7 +859,17 @@ def create_run_dir(runs_dir: Path, name: str, today: date) -> Path:
             :data:`RUN_NAME_PATTERN`, or when the directory already exists
             (never overwritten); the message names the directory.
     """
-    raise NotImplementedError
+    if not re.fullmatch(RUN_NAME_PATTERN, name):
+        raise EvalAbort(f"invalid run name {name!r}: it must match {RUN_NAME_PATTERN}")
+    run_dir = runs_dir / f"{today.isoformat()}-{name}"
+    runs_dir.mkdir(parents=True, exist_ok=True)
+    try:
+        run_dir.mkdir()
+    except FileExistsError:
+        raise EvalAbort(
+            f"run directory {run_dir} already exists; choose another --name or remove it"
+        ) from None
+    return run_dir
 
 
 def catalog_hash(cases_dir: Path = CASES_DIR) -> str:
@@ -639,12 +879,33 @@ def catalog_hash(cases_dir: Path = CASES_DIR) -> str:
     order, each as its file name (UTF-8), a NUL byte, its raw bytes and a NUL
     byte. Independent of which cases a run selects.
     """
-    raise NotImplementedError
+    digest = hashlib.sha256()
+    files = sorted(cases_dir.iterdir(), key=lambda entry: entry.name) if cases_dir.is_dir() else []
+    for entry in files:
+        if (
+            entry.is_file()
+            and not entry.name.startswith(".")
+            and entry.name.endswith(catalog.CASE_SUFFIX)
+        ):
+            digest.update(entry.name.encode("utf-8") + b"\0" + entry.read_bytes() + b"\0")
+    return digest.hexdigest()
 
 
 def git_commit() -> str:
     """Return ``git rev-parse HEAD`` of the repository, or ``"unknown"`` on any failure."""
-    raise NotImplementedError
+    try:
+        completed = subprocess.run(
+            ["git", "rev-parse", "HEAD"],  # noqa: S607
+            cwd=_EVAL_DIR,
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=False,
+        )
+    except OSError, subprocess.SubprocessError:
+        return "unknown"
+    commit = completed.stdout.strip()
+    return commit if completed.returncode == 0 and commit else "unknown"
 
 
 def make_record(
@@ -663,12 +924,38 @@ def make_record(
     yields ``None`` for tokens and model) and sets ``checks`` to
     :func:`automatic_checks` with the sources from :func:`returned_sources`.
     """
-    raise NotImplementedError
+    sources = returned_sources(case.tool, structured_content)
+    return CaseRecord(
+        id=case.id,
+        tool=case.tool,
+        category=str(case.category),
+        expected_outcome=case.expected_outcome,
+        input=case.input.model_dump(),
+        expected=case.expected,
+        allowed_sources=list(case.allowed_sources),
+        outcome=outcome,
+        structured_content=structured_content,
+        error_json=error_json,
+        failure=failure,
+        latency_ms=latency_ms,
+        input_tokens=telemetry.input_tokens if telemetry else None,
+        output_tokens=telemetry.output_tokens if telemetry else None,
+        model=telemetry.model if telemetry else None,
+        checks=automatic_checks(
+            expected_outcome=case.expected_outcome,
+            outcome=outcome,
+            sources=sources,
+            error_json=error_json,
+            allowed_sources=case.allowed_sources,
+        ),
+    )
 
 
 def append_record(results_path: Path, record: CaseRecord) -> None:
     """Append ``record`` as one JSON line to ``results_path`` and flush it."""
-    raise NotImplementedError
+    with results_path.open("a", encoding="utf-8") as handle:
+        handle.write(json.dumps(record.to_json_dict(), ensure_ascii=False) + "\n")
+        handle.flush()
 
 
 def read_records(results_path: Path) -> list[CaseRecord]:
@@ -678,7 +965,65 @@ def read_records(results_path: Path) -> list[CaseRecord]:
         EvalAbort: when the file is missing, a line is not valid JSON or not
             a valid record; the message names the file and the line number.
     """
-    raise NotImplementedError
+    try:
+        text = results_path.read_text(encoding="utf-8")
+    except OSError as exc:
+        raise EvalAbort(f"cannot read {results_path}: {exc}") from exc
+    records: list[CaseRecord] = []
+    for number, line in enumerate(text.splitlines(), start=1):
+        if not line.strip():
+            continue
+        try:
+            data = json.loads(line)
+            if not isinstance(data, dict):
+                raise ValueError("a record must be a JSON object")
+            records.append(CaseRecord.from_json_dict(data))
+        except ValueError as exc:
+            raise EvalAbort(f"{results_path}: line {number}: {exc}") from exc
+    return records
+
+
+def _server_gone(exc: Exception, client: Client) -> bool:
+    """Return whether the failed call means the server connection is lost."""
+    closed = isinstance(exc, MCPError) and exc.code == CONNECTION_CLOSED
+    return closed or not client.is_connected()
+
+
+def _describe_failure(exc: Exception, call_timeout: float) -> str:
+    """Return the short ``failure`` text of a call that raised ``exc``."""
+    if isinstance(exc, TimeoutError) or (isinstance(exc, MCPError) and exc.code == REQUEST_TIMEOUT):
+        return f"timeout after {call_timeout:g} s"
+    return f"{type(exc).__name__}: {exc}"
+
+
+def _is_error_json(value: Any) -> bool:
+    """Return whether ``value`` is exactly the ADR 0007 error JSON."""
+    if not isinstance(value, dict) or set(value) != {"error"}:
+        return False
+    error = value["error"]
+    return (
+        isinstance(error, dict)
+        and set(error) == {"code", "message", "request_id"}
+        and all(isinstance(item, str) for item in error.values())
+    )
+
+
+def _classify_result(
+    result: Any,
+) -> tuple[CallOutcome, dict[str, Any] | None, dict[str, Any] | None, str | None]:
+    """Return ``(outcome, structured_content, error_json, failure)`` of a tool result."""
+    if result.is_error:
+        text = next((block.text for block in result.content if hasattr(block, "text")), "")
+        try:
+            parsed = json.loads(text)
+        except ValueError:
+            parsed = None
+        if _is_error_json(parsed):
+            return "tool_error", None, parsed, None
+        return "call_failed", None, None, f"tool error outside the error contract: {text[:200]}"
+    if isinstance(result.structured_content, dict):
+        return "ok", result.structured_content, None, None
+    return "call_failed", None, None, "result without structuredContent"
 
 
 async def run_cases(
@@ -711,7 +1056,49 @@ async def run_cases(
     Returns:
         Every record, in case order.
     """
-    raise NotImplementedError
+    records: list[CaseRecord] = []
+    where = f"results so far: {results_path}; server log: {log_reader.path}"
+    async with AsyncExitStack() as stack:
+        client = Client(transport)
+        try:
+            await stack.enter_async_context(client)
+        except Exception as exc:
+            raise EvalAbort(
+                f"server failed to start ({type(exc).__name__}: {exc}); {where}"
+            ) from exc
+        for case in cases:
+            started = time.perf_counter()
+            outcome: CallOutcome
+            structured: dict[str, Any] | None = None
+            error_json: dict[str, Any] | None = None
+            failure: str | None = None
+            try:
+                result = await client.call_tool(
+                    case.tool,
+                    case.input.model_dump(),
+                    timeout=call_timeout,
+                    raise_on_error=False,
+                )
+            except Exception as exc:
+                if _server_gone(exc, client):
+                    raise EvalAbort(f"server exited during case {case.id}; {where}") from exc
+                outcome = "call_failed"
+                failure = _describe_failure(exc, call_timeout)
+            else:
+                outcome, structured, error_json, failure = _classify_result(result)
+            latency_ms = int((time.perf_counter() - started) * 1000)
+            record = make_record(
+                case,
+                outcome=outcome,
+                structured_content=structured,
+                error_json=error_json,
+                failure=failure,
+                latency_ms=latency_ms,
+                telemetry=log_reader.next_tool_call(),
+            )
+            append_record(results_path, record)
+            records.append(record)
+    return records
 
 
 async def run_command(
@@ -746,10 +1133,115 @@ async def run_command(
     Returns:
         The run directory.
     """
-    raise NotImplementedError
+    check_live_guard(environ)
+    cases = select_cases(load_strict_catalog(cases_dir), case_ids)
+    run_date = today or date.today()
+    run_dir = create_run_dir(runs_dir, name, run_date)
+    env = server_environment(environ)
+    log_path = run_dir / SERVER_LOG_FILE
+    transport = transport_factory(env, log_path)
+    records = await run_cases(
+        cases,
+        transport,
+        results_path=run_dir / RESULTS_FILE,
+        log_reader=ServerLogReader(log_path),
+        call_timeout=call_timeout,
+    )
+    settings = {setting: env.get(setting) or "default" for setting in REPORTED_SETTINGS}
+    settings["call_timeout_seconds"] = str(call_timeout)
+    run_data = RunData(
+        name=name,
+        date=run_date.isoformat(),
+        commit=git_commit(),
+        catalog_hash=catalog_hash(cases_dir),
+        models=list(dict.fromkeys(record.model for record in records if record.model)),
+        settings=settings,
+        case_ids=[record.id for record in records],
+    )
+    (run_dir / RUN_DATA_FILE).write_text(
+        json.dumps(run_data.to_json_dict(), indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
+    )
+    (run_dir / REVIEW_FILE).write_text(render_review(records, run_data), encoding="utf-8")
+    return run_dir
 
 
 # --- review and score -------------------------------------------------------
+
+
+def _inline(text: str) -> str:
+    """Return ``text`` on one line, so it cannot start a new Markdown line."""
+    return " ".join(text.split())
+
+
+def _cell(text: str) -> str:
+    """Return ``text`` as the content of one Markdown table cell."""
+    return _inline(text).replace("|", "\\|")
+
+
+def _fenced(text: str) -> list[str]:
+    """Return ``text`` in a code fence longer than any backtick run inside it."""
+    longest = max((len(run) for run in re.findall(r"`+", text)), default=0)
+    fence = "`" * max(3, longest + 1)
+    return [fence, *text.splitlines(), fence, ""]
+
+
+def _run_data_lines(*, records_count: int, run_data: RunData) -> list[str]:
+    """Return the ``## Run data`` section shared by ``review.md`` and ``report.md``."""
+    lines = [
+        "## Run data",
+        "",
+        f"- commit: {_inline(run_data.commit)}",
+        f"- date: {_inline(run_data.date)}",
+        f"- catalog hash: {_inline(run_data.catalog_hash)}",
+        f"- models: {', '.join(_inline(model) for model in run_data.models) or 'unknown'}",
+        f"- cases: {records_count}",
+    ]
+    lines += [
+        f"- setting {_inline(key)}: {_inline(value)}" for key, value in run_data.settings.items()
+    ]
+    return [*lines, ""]
+
+
+def _case_section(record: CaseRecord) -> list[str]:
+    """Return the ``## Case <id>`` section of ``review.md``."""
+    lines = [
+        f"## Case {record.id}",
+        "",
+        f"- category: {_inline(record.category)}",
+        f"- tool: {record.tool}",
+        f"- expected outcome: {_inline(record.expected_outcome)}",
+        f"- outcome: {record.outcome}",
+        f"- latency: {record.latency_ms} ms",
+        "",
+    ]
+    for key, label in (("query", "Question"), ("url", "URL"), ("question", "Question")):
+        if key in record.input:
+            lines += [f"### {label}", "", *_fenced(record.input[key])]
+    lines += ["### Expected", "", *_fenced(record.expected)]
+    lines += ["### Allowed sources", "", *_fenced("\n".join(record.allowed_sources))]
+    if record.outcome == "ok":
+        label, content = "Answer", _answer_text(record)
+    elif record.outcome == "tool_error":
+        label, content = "Error JSON", json.dumps(record.error_json, indent=2, ensure_ascii=False)
+    else:
+        label, content = "Failure", record.failure or ""
+    lines += [f"### {label}", "", *_fenced(content)]
+    sources = returned_sources(record.tool, record.structured_content)
+    lines += ["### Returned sources", "", *_fenced("\n".join(sources))]
+    lines += ["### Automatic results", ""]
+    lines += [f"- {metric}: {status}" for metric, status in record.checks.items()]
+    manual = [metric for metric, status in record.checks.items() if status == "manual"]
+    if manual:
+        lines += ["", "### Manual verdicts", ""]
+        lines += [f"- verdict {metric}:" for metric in manual]
+    return [*lines, ""]
+
+
+def _answer_text(record: CaseRecord) -> str:
+    """Return the answer text of a successful call."""
+    content = record.structured_content or {}
+    answer = content.get("answer")
+    return answer if isinstance(answer, str) else json.dumps(content, ensure_ascii=False)
 
 
 def render_review(records: Sequence[CaseRecord], run_data: RunData) -> str:
@@ -779,7 +1271,45 @@ def render_review(records: Sequence[CaseRecord], run_data: RunData) -> str:
     in that text, so it can never be read as a heading or verdict line.
     Contains no secret.
     """
-    raise NotImplementedError
+    lines = [f"# Eval review {run_data.date}-{run_data.name}", ""]
+    lines += _run_data_lines(records_count=len(records), run_data=run_data)
+    lines += [
+        "## How to score",
+        "",
+        "After the colon of every verdict line below, write `pass` or `fail`, optionally",
+        "followed by a short note. An empty or misspelled verdict makes `score` fail.",
+        "",
+        "## Overview",
+        "",
+        "| id | category | expected outcome | automatic results | open manual verdicts |",
+        "| --- | --- | --- | --- | --- |",
+    ]
+    for record in records:
+        automatic = "; ".join(
+            f"{metric}: {status}" for metric, status in record.checks.items() if status != "manual"
+        )
+        open_metrics = ", ".join(
+            metric for metric, status in record.checks.items() if status == "manual"
+        )
+        cells = (
+            record.id,
+            record.category,
+            record.expected_outcome,
+            automatic,
+            open_metrics or "-",
+        )
+        lines.append("| " + " | ".join(_cell(cell) for cell in cells) + " |")
+    lines.append("")
+    for record in records:
+        lines += _case_section(record)
+    return "\n".join(lines) + "\n"
+
+
+_FENCE_OPEN = re.compile(r"^ {0,3}(`{3,})")
+_FENCE_CLOSE = re.compile(r"^ {0,3}`{3,}\s*$")
+_CASE_HEADING = re.compile(r"^## Case (.+?)\s*$")
+_VERDICT_LINE = re.compile(r"^- verdict (correctness|groundedness|honesty):(.*)$")
+_VERDICT_VALUE = re.compile(r"^(pass|fail)(?:\s.*)?$")
 
 
 def parse_review(
@@ -809,7 +1339,47 @@ def parse_review(
         InvalidVerdictsError: listing every case and metric whose verdict is
             ``empty``, ``invalid``, ``missing`` or ``duplicate``.
     """
-    raise NotImplementedError
+    by_id = {record.id: record for record in records}
+    found: dict[tuple[str, Metric], list[str]] = {}
+    current: str | None = None
+    fence: int | None = None
+    for line in text.splitlines():
+        if fence is None:
+            opening = _FENCE_OPEN.match(line)
+            if opening:
+                fence = len(opening.group(1))
+                continue
+            heading = _CASE_HEADING.match(line)
+            if heading:
+                case_id = heading.group(1)
+                current = case_id if case_id in by_id else None
+                continue
+            verdict = _VERDICT_LINE.match(line)
+            if verdict and current is not None:
+                found.setdefault((current, verdict.group(1)), []).append(verdict.group(2).strip())
+        elif _FENCE_CLOSE.match(line) and len(line.strip()) >= fence:
+            fence = None
+    problems: list[VerdictProblem] = []
+    manual: dict[str, dict[Metric, ManualVerdict]] = {}
+    for record in records:
+        manual[record.id] = {}
+        for metric in METRICS:
+            if record.checks[metric] != "manual":
+                continue
+            values = found.get((record.id, metric), [])
+            if not values:
+                problems.append(VerdictProblem(record.id, metric, "missing"))
+            elif len(values) > 1:
+                problems.append(VerdictProblem(record.id, metric, "duplicate"))
+            elif not values[0]:
+                problems.append(VerdictProblem(record.id, metric, "empty"))
+            elif not (match := _VERDICT_VALUE.match(values[0])):
+                problems.append(VerdictProblem(record.id, metric, "invalid"))
+            else:
+                manual[record.id][metric] = match.group(1)
+    if problems:
+        raise InvalidVerdictsError(problems)
+    return manual
 
 
 def final_verdicts(
@@ -823,7 +1393,11 @@ def final_verdicts(
     Raises:
         KeyError: when a ``manual`` status has no entry in ``manual``.
     """
-    raise NotImplementedError
+    merged: dict[Metric, FinalVerdict] = {}
+    for metric in METRICS:
+        status = record.checks[metric]
+        merged[metric] = manual[metric] if status == "manual" else status
+    return merged
 
 
 def compute_rates(verdicts: Sequence[Mapping[Metric, FinalVerdict]]) -> list[MetricRate]:
@@ -832,7 +1406,23 @@ def compute_rates(verdicts: Sequence[Mapping[Metric, FinalVerdict]]) -> list[Met
     ``n/a`` verdicts count neither as passed nor in ``total``; thresholds come
     from :data:`THRESHOLDS`; ``met`` as defined in :class:`MetricRate`.
     """
-    raise NotImplementedError
+    rates: list[MetricRate] = []
+    for metric in METRICS:
+        values = [verdict[metric] for verdict in verdicts]
+        passed = values.count("pass")
+        total = passed + values.count("fail")
+        threshold = THRESHOLDS[metric]
+        rates.append(
+            MetricRate(
+                metric=metric,
+                passed=passed,
+                total=total,
+                rate_percent=100 * passed / total if total else None,
+                threshold_percent=threshold,
+                met=total > 0 and passed * 100 >= threshold * total,
+            )
+        )
+    return rates
 
 
 def percentile(values: Sequence[int], p: int) -> int | None:
@@ -844,7 +1434,12 @@ def percentile(values: Sequence[int], p: int) -> int | None:
     Raises:
         ValueError: when ``p`` is not between 1 and 100.
     """
-    raise NotImplementedError
+    if not 1 <= p <= 100:
+        raise ValueError(f"percentile must be between 1 and 100, got {p}")
+    if not values:
+        return None
+    rank = max(1, -(-p * len(values) // 100))
+    return sorted(values)[rank - 1]
 
 
 def build_score_report(
@@ -855,7 +1450,18 @@ def build_score_report(
     ``manual`` is the :func:`parse_review` result; see :class:`ScoreReport`
     for every field.
     """
-    raise NotImplementedError
+    verdicts = [final_verdicts(record, manual.get(record.id, {})) for record in records]
+    rates = compute_rates(verdicts)
+    latencies = [record.latency_ms for record in records]
+    return ScoreReport(
+        rates=rates,
+        go=all(rate.met for rate in rates),
+        latency_p50_ms=percentile(latencies, 50),
+        latency_p95_ms=percentile(latencies, 95),
+        input_tokens_total=sum(r.input_tokens for r in records if r.input_tokens is not None),
+        output_tokens_total=sum(r.output_tokens for r in records if r.output_tokens is not None),
+        case_count=len(records),
+    )
 
 
 def render_report(report: ScoreReport, run_data: RunData) -> str:
@@ -867,7 +1473,37 @@ def render_report(report: ScoreReport, run_data: RunData) -> str:
     ``NO-GO``, p50/p95 latency in ms (``n/a`` when unknown) and the input and
     output token totals. Contains no secret.
     """
-    raise NotImplementedError
+    lines = [f"# Eval report {run_data.date}-{run_data.name}", ""]
+    lines += _run_data_lines(records_count=report.case_count, run_data=run_data)
+    lines += [
+        "## Rates",
+        "",
+        "| metric | passed | total | rate | threshold | result |",
+        "| --- | --- | --- | --- | --- | --- |",
+    ]
+    for rate in report.rates:
+        shown = "n/a" if rate.rate_percent is None else f"{rate.rate_percent:.1f}%"
+        result = "met" if rate.met else "not met"
+        lines.append(
+            f"| {rate.metric} | {rate.passed} | {rate.total} | {shown} "
+            f"| {rate.threshold_percent}% | {result} |"
+        )
+    p50 = "n/a" if report.latency_p50_ms is None else f"{report.latency_p50_ms} ms"
+    p95 = "n/a" if report.latency_p95_ms is None else f"{report.latency_p95_ms} ms"
+    lines += [
+        "",
+        "## Result",
+        "",
+        f"**{'GO' if report.go else 'NO-GO'}**",
+        "",
+        "## Latency and tokens",
+        "",
+        f"- latency p50: {p50}",
+        f"- latency p95: {p95}",
+        f"- input tokens: {report.input_tokens_total}",
+        f"- output tokens: {report.output_tokens_total}",
+    ]
+    return "\n".join(lines) + "\n"
 
 
 def score_command(run_dir: Path) -> ScoreReport:
@@ -883,7 +1519,19 @@ def score_command(run_dir: Path) -> ScoreReport:
         EvalAbort: when ``run_dir`` or one of the input files is missing or
             malformed; no report is written then.
     """
-    raise NotImplementedError
+    if not run_dir.is_dir():
+        raise EvalAbort(f"run directory {run_dir} does not exist")
+    records = read_records(run_dir / RESULTS_FILE)
+    try:
+        run_data = RunData.from_json_dict(
+            json.loads((run_dir / RUN_DATA_FILE).read_text(encoding="utf-8"))
+        )
+        review = (run_dir / REVIEW_FILE).read_text(encoding="utf-8")
+    except (OSError, ValueError) as exc:
+        raise EvalAbort(f"cannot read the run files in {run_dir}: {exc}") from exc
+    report = build_score_report(records, parse_review(review, records))
+    (run_dir / REPORT_FILE).write_text(render_report(report, run_data), encoding="utf-8")
+    return report
 
 
 def main(argv: Sequence[str] | None = None, environ: Mapping[str, str] | None = None) -> int:
@@ -907,7 +1555,38 @@ def main(argv: Sequence[str] | None = None, environ: Mapping[str, str] | None = 
         0 on success (for ``score`` independent of go/no-go), 1 on
         :class:`EvalAbort`. Invalid arguments exit with code 2 via argparse.
     """
-    raise NotImplementedError
+    parser = argparse.ArgumentParser(
+        description="Evaluate the Gemini Search MCP server against the catalog (ADR 0005)."
+    )
+    commands = parser.add_subparsers(dest="command", required=True)
+    run_parser = commands.add_parser("run", help="run the catalog cases live (needs LIVE=1)")
+    run_parser.add_argument(
+        "--case", action="append", metavar="ID", help="run only this case id; repeatable"
+    )
+    run_parser.add_argument(
+        "--name", default=DEFAULT_RUN_NAME, help="run name; default: %(default)s"
+    )
+    score_parser = commands.add_parser("score", help="score a filled-in run directory")
+    score_parser.add_argument("run_dir", type=Path)
+    args = parser.parse_args(argv)
+    try:
+        if args.command == "run":
+            run_dir = asyncio.run(
+                run_command(
+                    environ=os.environ if environ is None else environ,
+                    name=args.name,
+                    case_ids=args.case or [],
+                )
+            )
+            print(f"run directory: {run_dir}")
+        else:
+            report = score_command(args.run_dir)
+            print(f"result: {'GO' if report.go else 'NO-GO'}")
+            print(f"report: {args.run_dir / REPORT_FILE}")
+    except EvalAbort as abort:
+        print(f"error: {abort}", file=sys.stderr)
+        return 1
+    return 0
 
 
 if __name__ == "__main__":

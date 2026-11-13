@@ -3,7 +3,7 @@ UV := uv
 
 .DEFAULT_GOAL := check
 
-.PHONY: install format lint typecheck test test-fast eval-validate check pre-commit
+.PHONY: install format lint typecheck test test-fast eval-validate eval check pre-commit
 
 install:
 	$(UV) python install $(PYTHON_VERSION)
@@ -30,6 +30,12 @@ test-fast:
 # Validate the ground-truth catalog; STRICT=1 adds --strict (issue #3, ADR 0005).
 eval-validate:
 	$(UV) run python eval/catalog.py $(if $(STRICT),--strict)
+
+# Live evaluation run (issue #10, ADR 0005). Paid Gemini calls: this target does
+# not set LIVE; the project owner exports LIVE=1 and GEMINI_API_KEY themselves.
+# Example: make eval ARGS="--name smoke --case search-stable-001"
+eval:
+	$(UV) run python eval/run_eval.py run $(ARGS)
 
 check: lint typecheck test
 
