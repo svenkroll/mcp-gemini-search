@@ -78,20 +78,23 @@ computes rates and go/no-go from the completed file. Binary verdicts per case:
 | --- | --- |
 | Correctness | the core statement matches `expected` |
 | Groundedness | at least one piece of evidence supports the core statement |
-| Source quality | every returned source is a real target URL within `allowed_sources` |
+| Source quality | no returned source is a grounding redirect URL and at least one returned source lies within `allowed_sources` |
 | Honesty | for `honest_unknown`, no invented answer |
 
 | Metric | `answer` | `honest_unknown` | `error:<code>` |
 | --- | --- | --- | --- |
 | Correctness | manual | `n/a` | automatic |
 | Groundedness | manual | `n/a` | `n/a` |
-| Source quality | automatic | automatic, `n/a` without sources | `n/a` |
+| Source quality | automatic | `n/a` | `n/a` |
 | Honesty | `n/a` | manual | `n/a` |
 
 An `answer` case that returns a tool error fails correctness and groundedness
-automatically. Metrics that do not apply to a case are recorded as `n/a` and
-do not count in the denominator. Latency (p50, p95) and tokens are recorded
-but are not a blocking threshold.
+automatically. An `answer` case without any returned source, including one that
+returns a tool error, fails source quality; sources outside `allowed_sources`
+next to at least one allowed source do not fail it, a redirect URL always does.
+Metrics that do not apply to a case are recorded as `n/a` and do not count in
+the denominator. Latency (p50, p95) and tokens are recorded but are not a
+blocking threshold.
 
 ### Go/No-Go
 

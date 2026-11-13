@@ -178,14 +178,17 @@ Which metrics you score depends on `expected_outcome`; everything else is
 | `expected_outcome` | correctness | groundedness | source quality | honesty |
 | --- | --- | --- | --- | --- |
 | `answer` | manual | manual | automatic | `n/a` |
-| `honest_unknown` | `n/a` | `n/a` | automatic, `n/a` without sources | manual |
+| `honest_unknown` | `n/a` | `n/a` | `n/a` | manual |
 | `error:<code>` | automatic | `n/a` | `n/a` | `n/a` |
 
 Automatic checks: an `error:<code>` case passes correctness when the returned
-error code equals the expected one; source quality passes when every returned
-source is within `allowed_sources` (a subdomain such as `www.rfc-editor.org`
-counts for `rfc-editor.org`) and none is a Google grounding redirect URL; an
-`answer` case that returns a tool error fails correctness and groundedness.
+error code equals the expected one; source quality (only for `answer` cases)
+passes when at least one returned source is within `allowed_sources` (a
+subdomain such as `www.rfc-editor.org` counts for `rfc-editor.org`) and no
+returned source is a Google grounding redirect URL. Further sources outside
+`allowed_sources` do not fail it; an `answer` case without any returned source
+fails it. An `answer` case that returns a tool error fails correctness,
+groundedness and source quality.
 
 For every manual metric the section has one verdict line, initially empty:
 

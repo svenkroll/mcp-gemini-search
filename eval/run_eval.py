@@ -697,10 +697,11 @@ def check_source_quality(
 
     The caller decides via :func:`applicability` whether the metric applies.
     """
-    for source in sources:
-        if not is_allowed_source(source, allowed_sources) or is_grounding_redirect(source):
-            return "fail"
-    return "pass"
+    if any(is_grounding_redirect(source) for source in sources):
+        return "fail"
+    return (
+        "pass" if any(is_allowed_source(source, allowed_sources) for source in sources) else "fail"
+    )
 
 
 def check_error_code(
