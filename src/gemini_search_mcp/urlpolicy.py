@@ -305,18 +305,23 @@ async def _follow_redirects(
         current = start
         hops = 0
         while True:
-            async with client.stream("GET", current) as response:
-                status = response.status_code
-                location = response.headers.get("Location")
+            try:
+                async with client.stream("GET", current) as response:
+                    status = response.status_code
+                    location = response.headers.get("Location")
+            except httpx.InvalidURL, ValueError:
+                # httpx builds the redirect request even with
+                # ``follow_redirects=False``; a malformed ``Location`` can make
+                # that parsing fail before the headers are available.
+                return None
             if status not in REDIRECT_STATUS_CODES or location is None:
                 return None
 
             try:
                 target = check_url(urljoin(current, location))
-            except UrlRejectedError:
+                target_url = httpx.URL(target)
+            except UrlRejectedError, httpx.InvalidURL, ValueError:
                 return None
-
-            target_url = httpx.URL(target)
             if target_url.host not in REDIRECT_ALLOWLIST:
                 return target
             if target_url.scheme != "https" or hops >= limits.max_redirects:
