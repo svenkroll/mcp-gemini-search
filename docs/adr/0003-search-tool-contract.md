@@ -53,9 +53,11 @@ missing grounding metadata or discarding useful partial results.
   otherwise an empty string.
 - `evidence`: all citations of this source. `start_index` and `end_index` are
   taken unchanged from Gemini; the server never computes positions. `text` is
-  the slice of `answer` between these indices. The adapter determines the
-  index unit (characters or UTF-8 bytes) from the Gemini documentation and
-  proves it with a test.
+  the slice of `answer` between these indices. The index unit is UTF-8 bytes,
+  not characters: a live check on 2026-11-13 (Gemini API `v1`, German answer
+  with umlauts) returned a largest `end_index` equal to the byte length of the
+  answer and larger than its character count. The slice must therefore be
+  taken from `answer.encode("utf-8")` and decoded again.
 - `search_queries`: the search queries Gemini actually executed.
 
 If sources, evidence or search queries are missing, the respective list is
