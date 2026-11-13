@@ -499,3 +499,16 @@ def test_ec6_missing_or_unparseable_retry_after_uses_backoff_with_jitter() -> No
         assert len(fake.calls) == 2
         assert len(sleeper.delays) == 1
         assert 1.0 <= sleeper.delays[0] < 2.0
+
+
+def test_default_client_stays_open_after_construction() -> None:
+    """The lazily built SDK client must not be closed by garbage collection."""
+
+    async def scenario() -> bool:
+        provider = GeminiProvider(_settings())
+        interactions_client: Any = provider._default_interactions()
+        await asyncio.sleep(0)
+        await asyncio.sleep(0)
+        return interactions_client.sdk_configuration.async_client.is_closed
+
+    assert asyncio.run(scenario()) is False

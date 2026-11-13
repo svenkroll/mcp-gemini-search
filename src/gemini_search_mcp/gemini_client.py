@@ -191,6 +191,7 @@ class GeminiProvider:
         self._settings = settings
         self._model = settings.gemini_model
         self._interactions: InteractionsClient | None = interactions_client
+        self._genai_client: genai.Client | None = None
         self._sleep: Sleep = sleep or asyncio.sleep
         self._now: Clock = now or time.monotonic
         self._semaphore = asyncio.Semaphore(settings.gemini_max_concurrency)
@@ -449,6 +450,10 @@ class GeminiProvider:
             api_key=self._settings.gemini_api_key.get_secret_value(),
             http_options=http_options,
         )
+        # Keep the client alive: the SDK closes the shared HTTP client when the
+        # ``client.aio`` wrapper is garbage collected, which would make every
+        # request after the first fail with "client has been closed".
+        self._genai_client = client
         return cast(InteractionsClient, client.aio.interactions)
 
     def _answer_text(self, response: interactions.Interaction) -> str:
