@@ -515,9 +515,26 @@ def test_ac1_source_quality_passes_when_every_source_is_allowed() -> None:
     assert run_eval.check_source_quality(sources, ["rfc-editor.org", "ietf.org"]) == "pass"
 
 
-def test_ac1_source_quality_fails_when_one_source_is_not_allowed() -> None:
+def test_ac1_source_quality_passes_with_one_allowed_and_one_other_source() -> None:
     sources = ["https://rfc-editor.org/a", "https://example.com/b"]
+    assert run_eval.check_source_quality(sources, ["rfc-editor.org"]) == "pass"
+
+
+def test_ac1_source_quality_fails_when_only_non_allowed_sources_are_returned() -> None:
+    sources = ["https://example.com/a", "https://example.org/b"]
     assert run_eval.check_source_quality(sources, ["rfc-editor.org"]) == "fail"
+
+
+def test_ac1_source_quality_fails_without_any_source() -> None:
+    assert run_eval.check_source_quality([], ["rfc-editor.org"]) == "fail"
+
+
+def test_ac1_source_quality_fails_for_an_allowed_source_plus_a_redirect_url() -> None:
+    sources = [
+        "https://rfc-editor.org/a",
+        "https://vertexaisearch.cloud.google.com/grounding-api-redirect/AbC123",
+    ]
+    assert run_eval.check_source_quality(sources, ["rfc-editor.org", "google.com"]) == "fail"
 
 
 def test_ac1_source_quality_fails_for_a_redirect_url_even_inside_an_allowed_domain() -> None:
@@ -587,18 +604,16 @@ def test_ac1_automatic_checks_decide_error_code_and_source_quality() -> None:
 
 
 @pytest.mark.parametrize(
-    ("expected_outcome", "has_sources", "expected"),
+    ("expected_outcome", "expected"),
     [
-        ("answer", True, ("manual", "manual", "automatic", "n/a")),
-        ("answer", False, ("manual", "manual", "automatic", "n/a")),
-        ("honest_unknown", True, ("n/a", "n/a", "automatic", "manual")),
-        ("honest_unknown", False, ("n/a", "n/a", "n/a", "manual")),
-        ("error:url_unreachable", False, ("automatic", "n/a", "n/a", "n/a")),
-        ("error:invalid_input", True, ("automatic", "n/a", "n/a", "n/a")),
+        ("answer", ("manual", "manual", "automatic", "n/a")),
+        ("honest_unknown", ("n/a", "n/a", "n/a", "manual")),
+        ("error:url_unreachable", ("automatic", "n/a", "n/a", "n/a")),
+        ("error:invalid_input", ("automatic", "n/a", "n/a", "n/a")),
     ],
 )
 def test_ac2_applicability_follows_the_table(
-    expected_outcome: str, has_sources: bool, expected: tuple[str, str, str, str]
+    expected_outcome: str, expected: tuple[str, str, str, str]
 ) -> None:
     result = run_eval.applicability(expected_outcome)
 
@@ -639,12 +654,7 @@ def test_ac2_automatic_checks_leave_manual_metrics_open_and_decide_the_rest() ->
         "source_quality": "pass",
         "honesty": "n/a",
     }
-    assert honest_with_sources == {
-        "correctness": "n/a",
-        "groundedness": "n/a",
-        "source_quality": "fail",
-        "honesty": "manual",
-    }
+    assert honest_with_sources == HONEST_CHECKS
     assert honest_without_sources == HONEST_CHECKS
 
 
@@ -659,7 +669,32 @@ def test_ac2_answer_case_with_a_tool_error_fails_correctness_and_groundedness() 
 
     assert checks["correctness"] == "fail"
     assert checks["groundedness"] == "fail"
+    assert checks["source_quality"] == "fail"
     assert checks["honesty"] == "n/a"
+
+
+def test_ac2_answer_case_without_sources_fails_source_quality() -> None:
+    checks = run_eval.automatic_checks(
+        expected_outcome="answer",
+        outcome="ok",
+        sources=[],
+        error_json=None,
+        allowed_sources=["rfc-editor.org"],
+    )
+
+    assert checks == {**ANSWER_CHECKS, "source_quality": "fail"}
+
+
+def test_ac2_answer_case_with_one_allowed_and_one_other_source_passes_source_quality() -> None:
+    checks = run_eval.automatic_checks(
+        expected_outcome="answer",
+        outcome="ok",
+        sources=["https://rfc-editor.org/a", "https://example.com/b"],
+        error_json=None,
+        allowed_sources=["rfc-editor.org"],
+    )
+
+    assert checks["source_quality"] == "pass"
 
 
 def test_ac2_error_case_that_succeeds_fails_correctness() -> None:
