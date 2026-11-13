@@ -6,7 +6,7 @@ from provider failures and unexpected exceptions to codes is checked through
 ``test_search_tool.py``.
 """
 
-from typing import Any
+from typing import Any, cast
 
 import pytest
 
@@ -124,6 +124,17 @@ def test_ac7_unexpected_exception_maps_to_internal_error_without_details(
     assert mapped.message == "Internal error."
     assert "SECRET" not in str(mapped)
     assert "SECRET" not in str(mapped.to_payload("req-1"))
+    assert mapped.__cause__ is original
+
+
+def test_ac7_unknown_provider_error_kind_maps_to_internal_error() -> None:
+    original = ProviderError(cast(Any, "unknown-kind"), LEAKY_DETAIL)
+
+    mapped = tool_error_from_exception(original)
+
+    assert mapped.code == "internal_error"
+    assert mapped.message == "Internal error."
+    assert LEAKY_DETAIL not in str(mapped.to_payload("req-1"))
     assert mapped.__cause__ is original
 
 

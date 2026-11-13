@@ -818,6 +818,21 @@ def test_ec3_evidence_text_function_never_raises_for_odd_offsets() -> None:
     assert evidence_text(answer, 5, 2) == ""
 
 
+def test_ac6_evidence_text_tolerates_lone_surrogate_in_answer() -> None:
+    answer = "a\ud800b"  # a lone surrogate takes 3 bytes, so "b" is bytes 4 to 5
+
+    assert evidence_text(answer, 4, 5) == "b"
+    assert "\ud800" not in evidence_text(answer, 0, 5)
+
+
+def test_ac6_lone_surrogate_in_answer_keeps_the_search_successful() -> None:
+    answer = "a\ud800b"
+    outcome, _ = _search(_result(answer, [_cite("https://example.com/a", "A", 4, 5)]))
+
+    assert outcome.output.answer == answer
+    assert outcome.output.sources[0].evidence[0].text == "b"
+
+
 # --- AC7: error mapping in run_search -------------------------------------------
 
 
