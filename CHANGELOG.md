@@ -27,6 +27,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- #5: Framework-free `urlpolicy` module implementing the ADR 0008 input check
+  without network access and the grounding redirect resolution against the
+  redirect allowlist, with `httpx` pinned exactly.
 - `ANALYZE_URL_ENABLED` (default `false`) controls whether `analyze_url` is
   registered (ADR 0010).
 - README sections on costs and on example `AGENTS.md` rules for `analyze_url`.
