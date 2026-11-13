@@ -50,7 +50,8 @@ from typing import Any, Protocol, cast
 
 from google import genai
 from google.genai import interactions, types
-from google.genai.errors import APIError, ContinuationInterruptedError
+from google.genai._gaos.lib.compat_errors import APIConnectionError, APIStatusError, APITimeoutError
+from google.genai.errors import ContinuationInterruptedError
 
 from gemini_search_mcp.config import Settings
 from gemini_search_mcp.provider import (
@@ -151,8 +152,11 @@ class InteractionsClient(Protocol):
             The final ``google.genai.interactions.Interaction`` of the call.
 
         Raises:
-            google.genai.errors.APIError: when the API answers with an error
-                status; ``code`` is the HTTP status code.
+            APIStatusError: when the API answers with an error status;
+                ``status_code`` is the HTTP status code and ``response``
+                carries the headers.
+            APITimeoutError: when the transport times out.
+            APIConnectionError: when no connection could be made.
         """
         ...
 
@@ -332,8 +336,10 @@ class GeminiProvider:
            one attempt happens. Each attempt passes the remaining budget as
            the per-request ``timeout`` so a hanging transport cannot outlive
            the budget.
-        4. Retried is only an :class:`APIError` whose HTTP ``code`` is in
-           :data:`_RETRYABLE_STATUS_CODES` (429 and transient 5xx). No other
+        4. Retried is only an HTTP error whose status is in
+           :data:`_RETRYABLE_STATUS_CODES` (429 and transient 5xx). The real
+           interactions client raises ``APIStatusError`` (status in
+           ``status_code``), not ``google.genai.errors.APIError``. No other
            error is retried; ``asyncio.CancelledError`` is never caught and
            never retried (issue #4).
         5. Wait between attempts:
@@ -353,10 +359,13 @@ class GeminiProvider:
              ``ContinuationInterruptedError`` wrapping a ``TimeoutError``
              (per-call timeout after continuation progress):
              ``ProviderError("unavailable")``;
-           - a non-retryable :class:`APIError` with an HTTP ``code`` from 400
-             to 499: ``ProviderError("rejected")``;
-           - any other :class:`APIError` (5xx outside the retryable set,
-             unknown or missing status) and every other exception:
+           - a transport timeout or connection failure
+             (``APITimeoutError``, ``APIConnectionError``): not retried,
+             ``ProviderError("unavailable")``;
+           - a non-retryable HTTP error with a status from 400 to 499:
+             ``ProviderError("rejected")``;
+           - any other HTTP error (5xx outside the retryable set, unknown or
+             missing status) and every other exception:
              ``ProviderError("internal")``.
 
         Returns:
@@ -397,9 +406,12 @@ class GeminiProvider:
                     raise
                 except TimeoutError:
                     raise ProviderError("unavailable") from None
-                except APIError as error:
-                    if error.code not in _RETRYABLE_STATUS_CODES:
-                        if 400 <= error.code < 500:
+                except APITimeoutError, APIConnectionError:
+                    raise ProviderError("unavailable") from None
+                except APIStatusError as error:
+                    status = error.status_code or 0  # unknown maps to internal
+                    if status not in _RETRYABLE_STATUS_CODES:
+                        if 400 <= status < 500:
                             raise ProviderError("rejected") from None
                         raise ProviderError("internal") from None
 
@@ -407,14 +419,14 @@ class GeminiProvider:
                     if retry >= attempts:
                         logger.warning(
                             "gemini request failed: status=%s attempts=%d",
-                            error.code,
+                            status,
                             retry,
                         )
                         raise ProviderError("unavailable") from None
 
                     logger.warning(
                         "gemini request failed: status=%s attempt=%d, retrying",
-                        error.code,
+                        status,
                         retry,
                     )
                     retry_after = self._retry_after_seconds(error)
@@ -592,7 +604,7 @@ class GeminiProvider:
             output_tokens=usage.total_output_tokens,
         )
 
-    def _retry_after_seconds(self, error: APIError) -> float | None:
+    def _retry_after_seconds(self, error: APIStatusError) -> float | None:
         """Parse the ``Retry-After`` header of a failed attempt.
 
         Reads the ``Retry-After`` header of the failed attempt's HTTP response.

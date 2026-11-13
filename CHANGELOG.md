@@ -43,3 +43,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   provider interface from ADR 0009 for Search Grounding and URL Context, with
   the operating limits from ADR 0006 and fully testable offline. The adapter
   pins the Gemini API version `v1` explicitly (ADR 0006).
+  HTTP errors of the real SDK client (`APIStatusError`, timeouts, connection
+  errors) are now mapped and retried as specified in ADR 0006 and ADR 0007.

@@ -13,15 +13,16 @@ import logging
 from pathlib import Path
 from typing import Any
 
+import httpx2 as httpx
 import pytest
 from google.genai import interactions
-from google.genai._interactions_continuation import ContinuationTimeoutError
-from google.genai.errors import (
-    APIError,
-    ClientError,
-    ContinuationInterruptedError,
-    ServerError,
+from google.genai._gaos.lib.compat_errors import (
+    APIConnectionError,
+    APIStatusError,
+    APITimeoutError,
 )
+from google.genai._interactions_continuation import ContinuationTimeoutError
+from google.genai.errors import ContinuationInterruptedError
 
 from gemini_search_mcp.config import Settings
 from gemini_search_mcp.gemini_client import (
@@ -53,44 +54,14 @@ def _settings(**overrides: Any) -> Settings:
     return Settings(**values)
 
 
-class _Headers:
-    """Case-insensitive header view of a hand-written HTTP response."""
-
-    def __init__(self, values: dict[str, str]) -> None:
-        self._values = {key.lower(): value for key, value in values.items()}
-
-    def get(self, key: str, default: str | None = None) -> str | None:
-        return self._values.get(key.lower(), default)
-
-    def __getitem__(self, key: str) -> str:
-        return self._values[key.lower()]
-
-    def __contains__(self, key: object) -> bool:
-        return isinstance(key, str) and key.lower() in self._values
-
-
-class _Response:
-    """Minimal HTTP response carrying only the headers the adapter may read."""
-
-    def __init__(self, headers: dict[str, str] | None = None) -> None:
-        self.headers = _Headers(headers or {})
-
-
-def _api_error(status: int, headers: dict[str, str] | None = None) -> APIError:
-    """Build a realistic SDK error for one HTTP status and optional headers."""
-    body = {
-        "error": {
-            "code": status,
-            "status": "ERROR",
-            "message": "hand-written fixture error",
-        }
-    }
-    response = _Response(headers)
-    if 400 <= status < 500:
-        return ClientError(status, body, response)
-    if 500 <= status < 600:
-        return ServerError(status, body, response)
-    return APIError(status, body, response)
+def _api_error(status: int, headers: dict[str, str] | None = None) -> APIStatusError:
+    """Build the error the real interactions client raises for one HTTP status."""
+    request = httpx.Request("POST", "https://gemini.invalid/v1/interactions")
+    response = httpx.Response(status, headers=headers, request=request)
+    body = {"error": {"code": "fixture", "message": "hand-written fixture error"}}
+    error = APIStatusError.generate(status, body, None, response)
+    assert isinstance(error, APIStatusError)
+    return error
 
 
 class _Sleeper:
@@ -318,6 +289,34 @@ def test_ac5_timeout_and_exhausted_retries_raise_unavailable() -> None:
         asyncio.run(provider.search("query"))
     assert exhausted.value.kind == "unavailable"
     assert len(fake.calls) == 3
+
+
+def test_http_errors_map_by_status_for_real_sdk_error_type() -> None:
+    """Real SDK HTTP errors map by status: 4xx rejected, non-retryable 5xx internal."""
+    for status, kind in [
+        (400, "rejected"),
+        (403, "rejected"),
+        (404, "rejected"),
+        (501, "internal"),
+    ]:
+        provider, fake = _provider([_api_error(status)])
+        with pytest.raises(ProviderError) as raised:
+            asyncio.run(provider.search("query"))
+        assert raised.value.kind == kind
+        assert len(fake.calls) == 1
+
+
+def test_transport_timeout_and_connection_errors_map_to_unavailable() -> None:
+    """SDK timeout and connection errors are not retried and map to unavailable."""
+    request = httpx.Request("POST", "https://gemini.invalid/v1/interactions")
+    for error in [APITimeoutError(request=request), APIConnectionError(request=request)]:
+        sleeper = _Sleeper()
+        provider, fake = _provider([error], sleeper=sleeper)
+        with pytest.raises(ProviderError) as raised:
+            asyncio.run(provider.search("query"))
+        assert raised.value.kind == "unavailable"
+        assert len(fake.calls) == 1
+        assert sleeper.delays == []
 
 
 def test_f1_continuation_interrupted_by_timeout_maps_to_unavailable() -> None:
