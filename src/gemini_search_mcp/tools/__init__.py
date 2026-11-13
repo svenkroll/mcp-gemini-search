@@ -8,4 +8,6 @@ standard library and the sibling layers ``provider``, ``urlpolicy`` and
 - :mod:`gemini_search_mcp.tools.errors`: the shared tool error type.
 - :mod:`gemini_search_mcp.tools.search`: input/output models, their JSON
   schemas and the domain logic of ``search``.
+- :mod:`gemini_search_mcp.tools.analyze_url`: input/output models, their JSON
+  schemas and the domain logic of ``analyze_url``.
 """
