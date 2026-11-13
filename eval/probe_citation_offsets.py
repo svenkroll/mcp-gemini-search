@@ -44,6 +44,11 @@ do not apply to it. It only runs with ``LIVE=1`` and a non-empty
 [--repeat <n>]``.
 """
 
+import argparse
+import asyncio
+import json
+import os
+import sys
 from collections.abc import Mapping, Sequence
 from dataclasses import asdict, dataclass
 from datetime import date
@@ -51,10 +56,12 @@ from pathlib import Path
 from typing import Any, Literal
 
 from google.genai import interactions
+from pydantic import ValidationError
+from pydantic_settings import BaseSettings, PydanticBaseSettingsSource
 
-from gemini_search_mcp.config import Settings
+from gemini_search_mcp.config import ConfigError, Settings, _config_error_from_validation
 from gemini_search_mcp.gemini_client import Clock, GeminiProvider, InteractionsClient, Sleep
-from gemini_search_mcp.provider import ProviderErrorKind
+from gemini_search_mcp.provider import ProviderError, ProviderErrorKind
 
 _EVAL_DIR = Path(__file__).resolve().parent
 
@@ -110,8 +117,53 @@ class Prompt:
     query: str
 
 
-PROMPTS: tuple[Prompt, ...] = ()
-"""The versioned prompt set (implementer: at least six prompts).
+PROMPTS: tuple[Prompt, ...] = (
+    Prompt(
+        "long-history-001",
+        "Write a detailed, well-structured overview of the history of the Internet from "
+        "ARPANET to today. Cover at least six distinct phases, each with its key "
+        "technologies, organizations and dates.",
+    ),
+    Prompt(
+        "long-comparison-001",
+        "Compare the Rust, Go and Zig programming languages in depth: memory management, "
+        "concurrency model, tooling, ecosystem maturity and typical use cases. Give each "
+        "language its own section with current facts.",
+    ),
+    Prompt(
+        "multi-part-001",
+        "Answer all parts separately, each with its own research: (1) Which version of "
+        "Python is the latest stable release and when was it published? (2) What is the "
+        "current population of Iceland? (3) Who won the most recent FIFA World Cup and "
+        "where was the final played? (4) What is the latest stable Linux kernel version?",
+    ),
+    Prompt(
+        "multi-part-002",
+        "I need four current facts, each checked separately: the latest stable version of "
+        "PostgreSQL, the latest LTS version of Node.js, the latest stable Kubernetes "
+        "release, and the current stable release of Rust.",
+    ),
+    Prompt(
+        "german-umlauts-001",
+        "Erkläre ausführlich, wie die Energiewende in Deutschland funktioniert: "
+        "Fördermaßnahmen, Netzausbau, Speichertechnologien und aktuelle Ausbauziele für "
+        "Wind- und Solarenergie. Nenne Zahlen und Quellen.",
+    ),
+    Prompt(
+        "german-umlauts-002",
+        "Welche Sehenswürdigkeiten in Köln, Düsseldorf und Münster sind besonders "
+        "empfehlenswert, und wie komme ich mit der Bahn von Köln nach Münster? Beantworte "
+        "jeden Teil der Frage einzeln mit aktuellen Angaben.",
+    ),
+    Prompt(
+        "non-bmp-001",
+        "Which emoji were added in the most recent Unicode release? List several of them "
+        "with their official Unicode names and code points, and explain which characters "
+        "the Unicode planes beyond the Basic Multilingual Plane contain, such as the "
+        "melting face emoji 🫠.",
+    ),
+)
+"""The versioned prompt set (at least six prompts).
 
 Chosen to make several text blocks or several searches likely: long answers,
 multi-part questions that need several searches, German questions with
@@ -266,7 +318,9 @@ class CapturingProvider(GeminiProvider):
         interaction; on failure the ``ProviderError`` (or cancellation)
         propagates unchanged and :attr:`last_interaction` is not modified.
         """
-        raise NotImplementedError
+        interaction = await super()._send(request_input, tools, system_instruction)
+        self.last_interaction = interaction
+        return interaction
 
 
 def check_live_guard(environ: Mapping[str, str]) -> None:
@@ -277,7 +331,35 @@ def check_live_guard(environ: Mapping[str, str]) -> None:
             ``GEMINI_API_KEY`` is missing, empty or whitespace-only (EC6).
             The message names the variable, never a value.
     """
-    raise NotImplementedError
+    if environ.get("LIVE") != "1":
+        raise ProbeAbort(
+            "LIVE=1 is required: a run makes paid Gemini calls (ADR 0006); no call was made"
+        )
+    if not environ.get("GEMINI_API_KEY", "").strip():
+        raise ProbeAbort(
+            "GEMINI_API_KEY is empty or not set: a live run needs a Gemini API key; "
+            "no call was made"
+        )
+
+
+class _MappingSettings(Settings):
+    """:class:`Settings` that reads only the keyword arguments it is given.
+
+    The process environment is not consulted, so a mapping passed to
+    :func:`probe_settings` is the single source; every validator and default of
+    :class:`Settings` still applies.
+    """
+
+    @classmethod
+    def settings_customise_sources(
+        cls,
+        settings_cls: type[BaseSettings],
+        init_settings: PydanticBaseSettingsSource,
+        env_settings: PydanticBaseSettingsSource,
+        dotenv_settings: PydanticBaseSettingsSource,
+        file_secret_settings: PydanticBaseSettingsSource,
+    ) -> tuple[PydanticBaseSettingsSource, ...]:
+        return (init_settings,)
 
 
 def probe_settings(environ: Mapping[str, str]) -> Settings:
@@ -292,7 +374,15 @@ def probe_settings(environ: Mapping[str, str]) -> Settings:
         ProbeAbort: when a variable violates its rule; the message is the
             ``ConfigError`` text (variable and rule, never a value).
     """
-    raise NotImplementedError
+    values = {
+        name: environ[name.upper()] for name in Settings.model_fields if name.upper() in environ
+    }
+    try:
+        return _MappingSettings(**values)
+    except ValidationError as error:
+        raise ProbeAbort(str(_config_error_from_validation(error))) from None
+    except ConfigError as error:
+        raise ProbeAbort(str(error)) from None
 
 
 def select_prompts(prompts: Sequence[Prompt], prompt_ids: Sequence[str]) -> list[Prompt]:
@@ -306,7 +396,14 @@ def select_prompts(prompts: Sequence[Prompt], prompt_ids: Sequence[str]) -> list
         ProbeAbort: when an id in ``prompt_ids`` is not in ``prompts``; the
             message names every unknown id.
     """
-    raise NotImplementedError
+    if not prompt_ids:
+        return list(prompts)
+    known = {prompt.id for prompt in prompts}
+    unknown = sorted({prompt_id for prompt_id in prompt_ids if prompt_id not in known})
+    if unknown:
+        raise ProbeAbort(f"unknown --prompt-id: {', '.join(unknown)}")
+    wanted = set(prompt_ids)
+    return [prompt for prompt in prompts if prompt.id in wanted]
 
 
 def create_run_dir(runs_dir: Path, today: date) -> Path:
@@ -318,7 +415,13 @@ def create_run_dir(runs_dir: Path, today: date) -> Path:
         ProbeAbort: when the directory already exists (never overwritten);
             the message names the directory.
     """
-    raise NotImplementedError
+    run_dir = runs_dir / f"{today.isoformat()}-{RUN_DIR_SUFFIX}"
+    runs_dir.mkdir(parents=True, exist_ok=True)
+    try:
+        run_dir.mkdir()
+    except FileExistsError:
+        raise ProbeAbort(f"run directory already exists: {run_dir}") from None
+    return run_dir
 
 
 def is_char_boundary(data: bytes, index: int) -> bool:
@@ -330,7 +433,24 @@ def is_char_boundary(data: bytes, index: int) -> bool:
     position inside a multi-byte character is not, and a negative or too
     large index is not. Never raises.
     """
-    raise NotImplementedError
+    if not 0 <= index <= len(data):
+        return False
+    return index == len(data) or not 0x80 <= data[index] <= 0xBF
+
+
+def _hypothesis_counts(
+    checked: Sequence[tuple[int, int]], low: int, high: int, reference: bytes
+) -> HypothesisCounts:
+    """Count fits and boundary hits of ``(start, end)`` pairs for one hypothesis.
+
+    A pair fits when ``low <= start < end <= high``; boundaries are checked in
+    ``reference``, the UTF-8 bytes the hypothesis refers to.
+    """
+    return HypothesisCounts(
+        fits=sum(1 for start, end in checked if low <= start < end <= high),
+        start_on_boundary=sum(1 for start, _ in checked if is_char_boundary(reference, start)),
+        end_on_boundary=sum(1 for _, end in checked if is_char_boundary(reference, end)),
+    )
 
 
 def block_records(interaction: interactions.Interaction) -> list[BlockRecord]:
@@ -349,7 +469,56 @@ def block_records(interaction: interactions.Interaction) -> list[BlockRecord]:
     Returns an empty list for a response without ``model_output`` step or
     without ``TextContent`` (EC1). Never raises for missing optional fields.
     """
-    raise NotImplementedError
+    texts: list[tuple[int, int, interactions.TextContent]] = []
+    for step_index, step in enumerate(interaction.steps or []):
+        if not isinstance(step, interactions.ModelOutputStep):
+            continue
+        block_index = 0
+        for content in step.content or []:
+            if isinstance(content, interactions.TextContent):
+                texts.append((step_index, block_index, content))
+                block_index += 1
+
+    block_bytes = [content.text.encode("utf-8") for _, _, content in texts]
+    answer = b"".join(block_bytes)
+    records: list[BlockRecord] = []
+    offset = 0
+    for (step_index, block_index, content), data in zip(texts, block_bytes, strict=True):
+        citations = [
+            annotation
+            for annotation in content.annotations or []
+            if isinstance(annotation, interactions.URLCitation)
+        ]
+        starts = [c.start_index for c in citations if c.start_index is not None]
+        ends = [c.end_index for c in citations if c.end_index is not None]
+        checked = [
+            (c.start_index, c.end_index)
+            for c in citations
+            if c.start_index is not None and c.end_index is not None
+        ]
+        length = len(data)
+        records.append(
+            BlockRecord(
+                step_index=step_index,
+                block_index=block_index,
+                offset=offset,
+                length=length,
+                url_citations=len(citations),
+                min_start=min(starts) if starts else None,
+                max_end=max(ends) if ends else None,
+                missing_index=len(citations) - len(checked),
+                global_hypothesis=(
+                    _hypothesis_counts(checked, offset, offset + length, answer)
+                    if offset > 0
+                    else None
+                ),
+                per_block_hypothesis=(
+                    _hypothesis_counts(checked, 0, length, data) if offset > 0 else None
+                ),
+            )
+        )
+        offset += length
+    return records
 
 
 def classify(blocks: Sequence[BlockRecord]) -> Classification:
@@ -370,7 +539,23 @@ def classify(blocks: Sequence[BlockRecord]) -> Classification:
 
     Blocks with ``offset == 0`` never influence the result.
     """
-    raise NotImplementedError
+    later = [block for block in blocks if block.offset > 0]
+    checked = sum(block.url_citations - block.missing_index for block in later)
+    global_fits = sum(
+        block.global_hypothesis.fits for block in later if block.global_hypothesis is not None
+    )
+    per_block_fits = sum(
+        block.per_block_hypothesis.fits for block in later if block.per_block_hypothesis is not None
+    )
+    if checked == 0:
+        return "undecidable"
+    if global_fits == checked and per_block_fits == checked:
+        return "undecidable"
+    if global_fits == checked:
+        return "global"
+    if per_block_fits == checked:
+        return "per_block"
+    return "inconsistent"
 
 
 def interaction_record(
@@ -382,7 +567,15 @@ def interaction_record(
     ``classification`` :func:`classify` of those blocks, ``answer_bytes`` the
     sum of the block lengths, ``error_kind`` ``None``.
     """
-    raise NotImplementedError
+    blocks = block_records(interaction)
+    return InteractionRecord(
+        prompt_id=prompt_id,
+        repeat=repeat,
+        classification=classify(blocks),
+        error_kind=None,
+        answer_bytes=sum(block.length for block in blocks),
+        blocks=blocks,
+    )
 
 
 async def probe_prompt(
@@ -397,7 +590,19 @@ async def probe_prompt(
     ``error_kind`` set to its ``kind``, ``classification`` ``None``,
     ``answer_bytes`` 0 and no blocks. Other exceptions propagate.
     """
-    raise NotImplementedError
+    provider.last_interaction = None
+    try:
+        await provider.search(prompt.query)
+    except ProviderError as error:
+        return InteractionRecord(
+            prompt_id=prompt.id,
+            repeat=repeat,
+            classification=None,
+            error_kind=error.kind,
+            answer_bytes=0,
+            blocks=[],
+        )
+    return interaction_record(prompt.id, repeat, provider.last_interaction)
 
 
 async def run_probe(
@@ -437,7 +642,34 @@ async def run_probe(
     Returns:
         The :class:`ProbeSummary` of all written records.
     """
-    raise NotImplementedError
+    check_live_guard(environ)
+    if not MIN_REPEAT <= repeat <= MAX_REPEAT:
+        raise ProbeAbort(f"--repeat must be between {MIN_REPEAT} and {MAX_REPEAT}")
+    selected = select_prompts(prompts, prompt_ids)
+    settings = probe_settings(environ)
+    run_dir = create_run_dir(runs_dir, today or date.today())
+    results_path = run_dir / RESULTS_FILE
+    provider = CapturingProvider(
+        settings, interactions_client=interactions_client, sleep=sleep, now=now
+    )
+
+    interactions_count = 0
+    counts: dict[Classification, int] = dict.fromkeys(CLASSIFICATIONS, 0)
+    errors: dict[str, int] = {}
+    with results_path.open("w", encoding="utf-8") as results:
+        for prompt in selected:
+            for repeat_number in range(1, repeat + 1):
+                record = await probe_prompt(provider, prompt, repeat_number)
+                results.write(json.dumps(record.to_json_dict()) + "\n")
+                results.flush()
+                interactions_count += 1
+                if record.classification is not None:
+                    counts[record.classification] += 1
+                if record.error_kind is not None:
+                    errors[record.error_kind] = errors.get(record.error_kind, 0) + 1
+    return ProbeSummary(
+        results_path=results_path, interactions=interactions_count, counts=counts, errors=errors
+    )
 
 
 def render_summary(summary: ProbeSummary) -> str:
@@ -449,7 +681,12 @@ def render_summary(summary: ProbeSummary) -> str:
     ``total: <interactions>``. Contains numbers, classifications and error
     kinds only; ends with a new line.
     """
-    raise NotImplementedError
+    lines = [
+        f"{classification}: {summary.counts[classification]}" for classification in CLASSIFICATIONS
+    ]
+    lines.extend(f"error {kind}: {summary.errors[kind]}" for kind in sorted(summary.errors))
+    lines.append(f"total: {summary.interactions}")
+    return "\n".join(lines) + "\n"
 
 
 def main(argv: Sequence[str] | None = None, environ: Mapping[str, str] | None = None) -> int:
@@ -469,7 +706,40 @@ def main(argv: Sequence[str] | None = None, environ: Mapping[str, str] | None = 
         0 on success (also when calls failed), 1 on :class:`ProbeAbort`.
         Non-integer arguments exit with code 2 via argparse.
     """
-    raise NotImplementedError
+    parser = argparse.ArgumentParser(
+        prog="probe_citation_offsets.py",
+        description="Measure the offset base of url_citation indices (live, paid calls).",
+    )
+    parser.add_argument(
+        "--prompt-id",
+        action="append",
+        default=[],
+        dest="prompt_ids",
+        metavar="ID",
+        help="restrict the run to this prompt id (repeatable)",
+    )
+    parser.add_argument(
+        "--repeat",
+        type=int,
+        default=MIN_REPEAT,
+        metavar="N",
+        help=f"repeat every prompt N times ({MIN_REPEAT} to {MAX_REPEAT}, default {MIN_REPEAT})",
+    )
+    args = parser.parse_args(argv)
+    try:
+        summary = asyncio.run(
+            run_probe(
+                environ=os.environ if environ is None else environ,
+                prompt_ids=args.prompt_ids,
+                repeat=args.repeat,
+            )
+        )
+    except ProbeAbort as abort:
+        print(f"error: {abort}", file=sys.stderr)
+        return 1
+    print(render_summary(summary), end="")
+    print(f"results: {summary.results_path}")
+    return 0
 
 
 if __name__ == "__main__":

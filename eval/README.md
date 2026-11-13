@@ -292,3 +292,75 @@ choose another `--name` to run again on the same day.
 No file contains `GEMINI_API_KEY`, `MCP_BEARER_TOKEN` or any other secret; the
 run data lists only an allowlist of non-secret settings. Web content in the
 answers is untrusted, so check a run before sharing or committing it.
+
+## Citation Offset Probe
+
+`eval/probe_citation_offsets.py` measures whether the `start_index` and
+`end_index` of `url_citation` annotations (UTF-8 bytes, ADR 0003) are relative
+to the whole answer or to their own text block. The result decides the offset
+base for #20. The script sends search requests exactly as `GeminiProvider.search`
+does (API version `v1`, model from `GEMINI_MODEL`, tool `google_search`, no
+system instruction) and evaluates the raw interaction below the adapter,
+because the adapter output no longer contains the block boundaries.
+
+```bash
+LIVE=1 GEMINI_API_KEY=... uv run python eval/probe_citation_offsets.py --repeat 3
+```
+
+- `--prompt-id <id>` is repeatable and restricts the run to the given prompts of
+  the versioned prompt set in the script; an unknown id aborts before any call.
+- `--repeat <n>` (1 to 5, default 1) repeats every prompt.
+- Without `LIVE=1` or with an empty `GEMINI_API_KEY` the script aborts before
+  any network call. An existing target directory aborts the run instead of
+  overwriting it; delete or move `eval/runs/<date>-offset-probe/` to run again
+  on the same day.
+
+### Cost notice
+
+A run makes paid Gemini calls (ADR 0006): the default run sends 7 prompts, so
+`--repeat 3` makes 21 calls. Every call can execute several billed Google Search
+queries on top of the token cost; prices and quotas are in ADR 0006. Start with
+one prompt (`--prompt-id <id>`) if you only want to check the setup.
+
+### Reading the summary
+
+The summary on stdout has one line per classification, one line per occurred
+error kind and the total, followed by the path of the result file:
+
+```text
+undecidable: 3
+global: 17
+per_block: 0
+inconsistent: 1
+error unavailable: 1
+total: 22
+results: eval/runs/2026-11-13-offset-probe/probe.jsonl
+```
+
+A block is every text block of every `model_output` step, in the order the
+adapter concatenates them. For each annotation in a block that does not start at
+byte 0 of the answer, the probe tests two hypotheses: `global` (the indices lie
+within the block's range of the whole answer) and `per_block` (the indices lie
+within the block's own text). Each interaction gets one classification:
+
+| Classification | Meaning |
+| --- | --- |
+| `global` | Every checked annotation fits the global hypothesis and at least one does not fit the per-block one: indices are relative to the whole answer |
+| `per_block` | The mirror case: indices are relative to their own text block |
+| `undecidable` | No decision possible: no annotation in a later block, only annotations without an index, or every annotation fits both hypotheses (the ranges overlap) |
+| `inconsistent` | Anything else, for example annotations that fit neither hypothesis or a mix |
+
+Read the counts as follows: only `global` and `undecidable` means the global
+base holds; only `per_block` and `undecidable` means the per-block base holds.
+Any `inconsistent` interaction needs a look at the lines in `probe.jsonl`
+before deciding. Many `undecidable` interactions mean the prompts rarely
+produced several text blocks; use more repetitions. A failed call is counted
+under `error <kind>` and does not count as an interaction of a classification.
+
+`probe.jsonl` has one line per interaction with the prompt id, the repetition,
+the classification or error kind, the answer size in bytes and one record per
+block (offsets, lengths, annotation counts, smallest start, largest end, number
+of annotations with a missing index, and per hypothesis the number of fits and
+of start and end indices on a UTF-8 character boundary). It contains numbers,
+prompt ids and classifications only: no answer text, URL, title, search query or
+prompt text. Post the stdout summary as a comment on #20.
