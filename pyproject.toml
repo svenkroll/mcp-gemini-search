@@ -13,11 +13,17 @@ classifiers = [
     "Programming Language :: Python :: 3.14",
 ]
 dependencies = [
+    "fastmcp==4.1.6",
     "google-genai==3.3.0",
     "httpx==0.28.1",
     "pydantic==2.14.3",
     "pydantic-settings==2.16.2",
+    "starlette==1.10.0",
+    "uvicorn==0.54.0",
 ]
+
+[project.scripts]
+gemini-search-mcp = "gemini_search_mcp.server:main"
 
 [build-system]
 requires = ["hatchling==1.33.0"]
