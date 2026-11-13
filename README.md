@@ -105,9 +105,18 @@ with HTTP 403; requests without `Origin` are processed.
 
 #### Passing the token in OpenHands
 
-In OpenHands, add the server as a Streamable HTTP (`shttp`) MCP server with the
-URL `https://<your host>/mcp` and enter the token in the field "Bearer token".
-In a configuration file or on the command line, pass it as a header instead:
+In OpenHands (Customize > MCP Servers > Add custom MCP server), enter:
+
+1. Server Type: `SHTTP`.
+2. URL: `https://<your host>/mcp`.
+3. Authentication: `Bearer token`.
+4. API Key: the value of `MCP_BEARER_TOKEN`. OpenHands then sends
+   `Authorization: Bearer <token>` with every request.
+
+Server name and Timeout (seconds) are optional.
+
+The legacy OpenHands CLI, which is no longer actively maintained, passes the
+token as a header instead:
 
 ```bash
 openhands mcp add gemini-search --transport http \
