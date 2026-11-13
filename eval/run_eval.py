@@ -26,15 +26,21 @@ Two subcommands, no evaluation framework and no LLM judge:
     against :data:`THRESHOLDS`, and writes ``report.md`` into the run
     directory.
 
-Metrics, applicability and automatic checks follow the table of issue #10:
+Metrics, applicability and automatic checks follow the table of issue #10 as
+amended by the project owner (ADR 0005, fix round 1):
 
-=================  ===========  ============  ===========================  =======
-expected_outcome   correctness  groundedness  source_quality               honesty
-=================  ===========  ============  ===========================  =======
-``answer``         manual       manual        automatic                    n/a
-``honest_unknown`` n/a          n/a           automatic, n/a w/o sources   manual
-``error:<code>``   automatic    n/a           n/a                          n/a
-=================  ===========  ============  ===========================  =======
+=================  ===========  ============  ==============  =======
+expected_outcome   correctness  groundedness  source_quality  honesty
+=================  ===========  ============  ==============  =======
+``answer``         manual       manual        automatic       n/a
+``honest_unknown`` n/a          n/a           n/a             manual
+``error:<code>``   automatic    n/a           n/a             n/a
+=================  ===========  ============  ==============  =======
+
+Source quality passes when no returned source is a grounding redirect URL and
+at least one returned source lies within ``allowed_sources``; otherwise it
+fails, so an ``answer`` case without returned sources (including a tool error
+or a failed call) fails it.
 
 Like :mod:`catalog`, this file is not part of a package and never imports
 ``gemini_search_mcp``: it measures exactly what an MCP client receives.
@@ -567,13 +573,13 @@ class ScoreReport:
 # --- automatic checks -------------------------------------------------------
 
 
-def applicability(expected_outcome: str, *, has_sources: bool) -> dict[Metric, Applicability]:
-    """Return how each metric is decided for a case, per the table of issue #10.
+def applicability(expected_outcome: str) -> dict[Metric, Applicability]:
+    """Return how each metric is decided for a case, per the module docstring table.
+
+    Depends only on ``expected_outcome``, never on the call result.
 
     Args:
         expected_outcome: ``answer``, ``honest_unknown`` or ``error:<code>``.
-        has_sources: whether the call returned at least one source (see
-            :func:`returned_sources`); only matters for ``honest_unknown``.
 
     Returns:
         One entry per metric of :data:`METRICS`:
@@ -581,7 +587,7 @@ def applicability(expected_outcome: str, *, has_sources: bool) -> dict[Metric, A
         - ``answer``: correctness ``manual``, groundedness ``manual``,
           source_quality ``automatic``, honesty ``n/a``;
         - ``honest_unknown``: correctness ``n/a``, groundedness ``n/a``,
-          source_quality ``automatic`` with sources and ``n/a`` without,
+          source_quality ``n/a`` (with and without returned sources),
           honesty ``manual``;
         - ``error:<code>``: correctness ``automatic``, every other metric
           ``n/a``.
@@ -600,7 +606,7 @@ def applicability(expected_outcome: str, *, has_sources: bool) -> dict[Metric, A
         return {
             "correctness": "n/a",
             "groundedness": "n/a",
-            "source_quality": "automatic" if has_sources else "n/a",
+            "source_quality": "n/a",
             "honesty": "manual",
         }
     if expected_outcome.startswith("error:") and len(expected_outcome) > len("error:"):
@@ -680,10 +686,16 @@ def check_source_quality(
 ) -> Literal["pass", "fail"]:
     """Decide source quality (ADR 0005) for the returned ``sources``.
 
-    ``pass`` when every source satisfies :func:`is_allowed_source` and none
-    satisfies :func:`is_grounding_redirect`; otherwise ``fail``. An empty
-    ``sources`` list passes (the rule holds for every returned source); the
-    caller decides via :func:`applicability` whether the metric applies.
+    ``pass`` exactly when no source satisfies :func:`is_grounding_redirect`
+    and at least one source satisfies :func:`is_allowed_source`; otherwise
+    ``fail``. Consequences:
+
+    - an empty ``sources`` list fails;
+    - one allowed source plus a source outside ``allowed_sources`` passes;
+    - only sources outside ``allowed_sources`` fail;
+    - an allowed source plus a grounding redirect URL fails.
+
+    The caller decides via :func:`applicability` whether the metric applies.
     """
     for source in sources:
         if not is_allowed_source(source, allowed_sources) or is_grounding_redirect(source):
@@ -724,19 +736,21 @@ def automatic_checks(
 ) -> dict[Metric, MetricStatus]:
     """Return the status of every metric after the checks that need no LLM.
 
-    Starts from :func:`applicability` with ``has_sources=bool(sources)``:
+    Starts from :func:`applicability` of ``expected_outcome``:
     ``n/a`` stays ``n/a``, ``manual`` becomes ``manual``, ``automatic`` is
     decided by :func:`check_source_quality` (source_quality) or
     :func:`check_error_code` (correctness of ``error:<code>``). Then:
 
     - ``answer`` case with ``outcome == "tool_error"``: correctness and
-      groundedness are ``fail`` (no manual verdict needed);
+      groundedness are ``fail`` (no manual verdict needed); source_quality
+      is ``fail`` as well, because a tool error returns no sources
+      (:func:`check_source_quality` of an empty list);
     - any case with ``outcome == "call_failed"``: every metric that is not
       ``n/a`` is ``fail``.
 
     Returns one entry per metric of :data:`METRICS`.
     """
-    decided = applicability(expected_outcome, has_sources=bool(sources))
+    decided = applicability(expected_outcome)
     checks: dict[Metric, MetricStatus] = {}
     for metric in METRICS:
         if decided[metric] == "n/a":

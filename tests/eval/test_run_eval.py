@@ -600,14 +600,14 @@ def test_ac1_automatic_checks_decide_error_code_and_source_quality() -> None:
 def test_ac2_applicability_follows_the_table(
     expected_outcome: str, has_sources: bool, expected: tuple[str, str, str, str]
 ) -> None:
-    result = run_eval.applicability(expected_outcome, has_sources=has_sources)
+    result = run_eval.applicability(expected_outcome)
 
     assert tuple(result[metric] for metric in run_eval.METRICS) == expected
 
 
 def test_ac2_applicability_rejects_an_unknown_expected_outcome() -> None:
     with pytest.raises(ValueError, match=r"."):
-        run_eval.applicability("maybe", has_sources=False)
+        run_eval.applicability("maybe")
 
 
 def test_ac2_automatic_checks_leave_manual_metrics_open_and_decide_the_rest() -> None:
