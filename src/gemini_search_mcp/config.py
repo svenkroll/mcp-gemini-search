@@ -50,6 +50,7 @@ _FIELD_VARIABLES: dict[str, str] = {
     "gemini_timeout_seconds": "GEMINI_TIMEOUT_SECONDS",
     "gemini_max_concurrency": "GEMINI_MAX_CONCURRENCY",
     "gemini_max_retries": "GEMINI_MAX_RETRIES",
+    "analyze_url_enabled": "ANALYZE_URL_ENABLED",
     "log_queries": "LOG_QUERIES",
     "log_level": "LOG_LEVEL",
     "mcp_transport": "MCP_TRANSPORT",
@@ -65,6 +66,8 @@ _NUMERIC_RANGES: dict[str, tuple[int, int]] = {
     "mcp_port": (1, 65535),
 }
 
+_BOOLEAN_FIELDS = frozenset({"analyze_url_enabled", "log_queries"})
+
 _INTEGER_ERROR_TYPES = frozenset({"int_parsing", "int_type", "int_from_float"})
 _BOUND_ERROR_TYPES = frozenset(
     {"greater_than", "greater_than_equal", "less_than", "less_than_equal"}
@@ -78,7 +81,7 @@ def _rule_for_error(field: str, error_type: str) -> str:
         if error_type in _BOUND_ERROR_TYPES:
             return f"must be between {low} and {high}"
         return "must be an integer"
-    if field == "log_queries":
+    if field in _BOOLEAN_FIELDS:
         return "must be a boolean"
     if field == "log_level":
         return "must be one of debug, info, warning, error"
@@ -117,6 +120,8 @@ class Settings(BaseSettings):
     - ``GEMINI_TIMEOUT_SECONDS``: default 60, integer from 1 to 300.
     - ``GEMINI_MAX_CONCURRENCY``: default 4, integer from 1 to 32.
     - ``GEMINI_MAX_RETRIES``: default 2, integer from 0 to 5.
+    - ``ANALYZE_URL_ENABLED``: default ``False``, must be a boolean; ``False``
+      means the ``analyze_url`` tool is not registered (ADR 0004).
     - ``LOG_QUERIES``: default ``False``, must be a boolean.
     - ``LOG_LEVEL``: default ``info``, one of ``debug``, ``info``,
       ``warning``, ``error``, case-insensitive.
@@ -140,6 +145,7 @@ class Settings(BaseSettings):
     gemini_timeout_seconds: int = Field(default=60, ge=1, le=300)
     gemini_max_concurrency: int = Field(default=4, ge=1, le=32)
     gemini_max_retries: int = Field(default=2, ge=0, le=5)
+    analyze_url_enabled: bool = False
     log_queries: bool = False
     log_level: LogLevel = "info"
     mcp_transport: Transport = "stdio"

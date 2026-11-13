@@ -15,6 +15,7 @@ CONFIG_VARIABLES = (
     "GEMINI_TIMEOUT_SECONDS",
     "GEMINI_MAX_CONCURRENCY",
     "GEMINI_MAX_RETRIES",
+    "ANALYZE_URL_ENABLED",
     "LOG_QUERIES",
     "LOG_LEVEL",
     "MCP_TRANSPORT",
@@ -34,6 +35,7 @@ DEFAULT_VALUES = {
     "gemini_timeout_seconds": 60,
     "gemini_max_concurrency": 4,
     "gemini_max_retries": 2,
+    "analyze_url_enabled": False,
     "log_queries": False,
     "log_level": "info",
     "mcp_transport": "stdio",
@@ -264,3 +266,35 @@ def test_ec7_upper_case_log_level_and_transport_are_accepted(env: pytest.MonkeyP
     settings = load_settings()
     assert settings.log_level == "info"
     assert settings.mcp_transport == "http"
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [("true", True), ("TRUE", True), ("1", True), ("false", False), ("0", False)],
+)
+def test_analyze_url_switch_accepts_booleans(
+    env: pytest.MonkeyPatch, value: str, expected: bool
+) -> None:
+    env.setenv("GEMINI_API_KEY", VALID_KEY)
+    env.setenv("ANALYZE_URL_ENABLED", value)
+    assert load_settings().analyze_url_enabled is expected
+
+
+def test_analyze_url_switch_empty_value_falls_back_to_disabled(
+    env: pytest.MonkeyPatch,
+) -> None:
+    env.setenv("GEMINI_API_KEY", VALID_KEY)
+    env.setenv("ANALYZE_URL_ENABLED", "")
+    assert load_settings().analyze_url_enabled is False
+
+
+def test_analyze_url_switch_non_boolean_exits_with_code_2(
+    env: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    env.setenv("GEMINI_API_KEY", VALID_KEY)
+    env.setenv("ANALYZE_URL_ENABLED", "maybe")
+    with pytest.raises(SystemExit) as excinfo:
+        load_settings_or_exit()
+    assert excinfo.value.code == 2
+    assert capsys.readouterr().err.strip() == "ANALYZE_URL_ENABLED: must be a boolean"
