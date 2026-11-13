@@ -2,10 +2,10 @@ id: analyze-url-pdf-004
 tool: analyze_url
 category: url_pdf
 input:
-  url: https://www.rfc-editor.org/rfc/rfc9562.pdf
-  question: Which earlier RFC does this document obsolete?
-expected: RFC 9562 obsoletes RFC 4122.
+  url: https://nvlpubs.nist.gov/nistpubs/fips/nist.fips.186-5.pdf
+  question: For how long does FIPS 186-4 remain in effect after the publication of this standard?
+expected: FIPS 186-4 remains in effect for one year following the publication of FIPS 186-5, after which it is withdrawn.
 allowed_sources:
-- rfc-editor.org
-ground_truth_date: 2026-11-12
+- nist.gov
+ground_truth_date: 2026-11-13
 expected_outcome: answer

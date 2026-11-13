@@ -2,10 +2,10 @@ id: analyze-url-html-001
 tool: analyze_url
 category: url_html
 input:
-  url: https://www.rfc-editor.org/rfc/rfc1035.html
-  question: Which protocol does RFC 1035 specify?
-expected: RFC 1035 specifies the Internet's Domain Name System (DNS).
+  url: https://toml.io/en/v1.0.0
+  question: Which range of integers should a TOML implementation accept and handle losslessly according to this specification?
+expected: Arbitrary 64-bit signed integers, from −2^63 to 2^63−1, should be accepted and handled losslessly.
 allowed_sources:
-- rfc-editor.org
-ground_truth_date: 2026-11-12
+- toml.io
+ground_truth_date: 2026-11-13
 expected_outcome: answer
