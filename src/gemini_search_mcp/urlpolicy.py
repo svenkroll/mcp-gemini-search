@@ -21,10 +21,14 @@ calling layer only and never reaches a client (ADR 0007); the module also
 never reads or returns page content.
 """
 
+import asyncio
+import ipaddress
+import time
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 
 import httpx
+from pydantic import HttpUrl, TypeAdapter, ValidationError
 
 REDIRECT_ALLOWLIST: frozenset[str] = frozenset({"vertexaisearch.cloud.google.com"})
 """The only hosts the server itself ever connects to (ADR 0008).
@@ -96,6 +100,49 @@ class RedirectResolution:
     target_url: str | None
 
 
+_HTTP_URL = TypeAdapter(HttpUrl)
+
+
+def _parse_input_url(url: str) -> HttpUrl:
+    """Apply the input rules of ADR 0008 and return the parsed, normalized URL.
+
+    Shared by :func:`check_input_url` and :func:`resolve_redirects` so every
+    rule is evaluated exactly once and in one place. Raises
+    :class:`UrlPolicyError` for the first violated rule.
+    """
+    if len(url) > MAX_URL_LENGTH:
+        raise UrlPolicyError(f"url must be at most {MAX_URL_LENGTH} characters")
+    try:
+        parsed = _HTTP_URL.validate_python(url)
+    except ValidationError as exc:
+        raise UrlPolicyError("url must be a valid absolute http or https URL") from exc
+    if parsed.host is None:
+        raise UrlPolicyError("url must contain a host")
+    if parsed.scheme not in ("http", "https"):
+        raise UrlPolicyError("url scheme must be http or https")
+    if parsed.username is not None or parsed.password is not None:
+        raise UrlPolicyError("url must not contain credentials")
+    if parsed.port not in (None, 80, 443):
+        raise UrlPolicyError("url port must be empty, 80 or 443")
+
+    host = parsed.host
+    literal = host[1:-1] if host.startswith("[") and host.endswith("]") else host
+    try:
+        address = ipaddress.ip_address(literal)
+    except ValueError:
+        pass
+    else:
+        if not address.is_global:
+            raise UrlPolicyError("url host must not be a non-global IP address")
+
+    normalized_host = host.rstrip(".").lower()
+    if normalized_host == "localhost" or normalized_host.endswith(
+        (".localhost", ".local", ".internal")
+    ):
+        raise UrlPolicyError("url host must not be a local host name")
+    return parsed
+
+
 def check_input_url(url: str) -> str:
     """Check one URL against the input rules of ADR 0008, entirely offline.
 
@@ -148,7 +195,7 @@ def check_input_url(url: str) -> str:
         UrlPolicyError: the URL violates one of the rules above; ``reason``
             names the violated rule and is used only for logging.
     """
-    raise NotImplementedError("check_input_url")
+    return str(_parse_input_url(url))
 
 
 async def resolve_redirects(
@@ -235,4 +282,107 @@ async def resolve_redirects(
         No host outside :data:`REDIRECT_ALLOWLIST` was contacted, no request
         followed a redirect automatically, and no response body was read.
     """
-    raise NotImplementedError("resolve_redirects")
+    clock = now if now is not None else time.monotonic
+    distinct_urls = list(dict.fromkeys(urls))
+    if not distinct_urls:
+        return []
+
+    deadline = clock() + OVERALL_BUDGET_SECONDS
+    semaphore = asyncio.Semaphore(MAX_PARALLEL_RESOLUTIONS)
+    async with httpx.AsyncClient(transport=transport, follow_redirects=False) as client:
+        tasks = {
+            url: asyncio.create_task(_resolve_with_slot(client, url, deadline, clock, semaphore))
+            for url in distinct_urls
+        }
+        _, pending = await asyncio.wait(tasks.values(), timeout=max(0.0, deadline - clock()))
+        for task in pending:
+            task.cancel()
+        if pending:
+            await asyncio.gather(*pending, return_exceptions=True)
+
+    results: list[RedirectResolution] = []
+    for url, task in tasks.items():
+        if task in pending:
+            results.append(RedirectResolution(url=url, target_url=None))
+        else:
+            results.append(task.result())
+    return results
+
+
+def _request_timeout(remaining_seconds: float) -> httpx.Timeout:
+    """Per-request timeout capped by the remaining batch budget (ADR 0008)."""
+    total = min(TOTAL_TIMEOUT_SECONDS, remaining_seconds)
+    connect = min(CONNECT_TIMEOUT_SECONDS, total)
+    return httpx.Timeout(connect=connect, read=total, write=total, pool=connect)
+
+
+async def _resolve_with_slot(
+    client: httpx.AsyncClient,
+    url: str,
+    deadline: float,
+    clock: Clock,
+    semaphore: asyncio.Semaphore,
+) -> RedirectResolution:
+    """Resolve one URL once a parallel slot is free, capped by the budget."""
+    async with semaphore:
+        remaining = deadline - clock()
+        if remaining <= 0:
+            return RedirectResolution(url=url, target_url=None)
+        try:
+            async with asyncio.timeout(min(TOTAL_TIMEOUT_SECONDS, remaining)):
+                target_url = await _resolve_one(client, url, deadline, clock)
+        except TimeoutError:
+            target_url = None
+        return RedirectResolution(url=url, target_url=target_url)
+
+
+async def _resolve_one(
+    client: httpx.AsyncClient,
+    url: str,
+    deadline: float,
+    clock: Clock,
+) -> str | None:
+    """Follow the redirect chain of one URL; return its target or ``None``."""
+    try:
+        parsed = _parse_input_url(url)
+    except UrlPolicyError:
+        return None
+    if parsed.scheme != "https" or parsed.host not in REDIRECT_ALLOWLIST:
+        return None
+
+    current = str(parsed)
+    followed = 0
+    while True:
+        remaining = deadline - clock()
+        if remaining <= 0:
+            return None
+        try:
+            request = client.build_request("GET", current, timeout=_request_timeout(remaining))
+            response = await client.send(request, stream=True, follow_redirects=False)
+        except Exception:
+            return None
+        try:
+            status_code = response.status_code
+            location = response.headers.get("Location")
+        finally:
+            await response.aclose()
+
+        if not 300 <= status_code < 400 or location is None:
+            return None
+        try:
+            target = httpx.URL(current).join(location)
+        except Exception:
+            return None
+
+        target_host = (target.host or "").lower()
+        if target_host in REDIRECT_ALLOWLIST:
+            if target.scheme.lower() != "https" or followed >= MAX_REDIRECTS:
+                return None
+            current = str(target)
+            followed += 1
+            continue
+
+        try:
+            return check_input_url(str(target))
+        except UrlPolicyError:
+            return None
