@@ -27,6 +27,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- #8: FastMCP server `gemini-search-mcp` with stdio and stateless Streamable
+  HTTP (`/mcp`), `search` always and `analyze_url` only with
+  `ANALYZE_URL_ENABLED=true`, tool annotations and titles, results and errors
+  per ADR 0003, 0004 and 0007, health endpoints `/health/live` and
+  `/health/ready`, `Origin` validation with HTTP 403, and one JSON log line per
+  tool call. Adds `fastmcp`, `starlette` and `uvicorn`, pinned exactly.
 - #5: Framework-free `urlpolicy` module implementing the ADR 0008 input check
   without network access and the grounding redirect resolution against the
   redirect allowlist, with `httpx` pinned exactly.

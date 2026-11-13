@@ -31,7 +31,7 @@ coupling tool logic to Gemini response types.
 | `gemini_client` | Gemini adapter, implements `provider` | `provider`, `config`, google-genai |
 | `urlpolicy` | ADR 0008 | standard library, pydantic, httpx |
 | `tools` | contracts from ADR 0003, 0004, errors from ADR 0007 | `provider`, `urlpolicy`, `config` |
-| `server` | FastMCP wrappers, auth, health, logging | everything above, fastmcp |
+| `server` | FastMCP wrappers, auth, health, logging | everything above, fastmcp, starlette, uvicorn |
 
 ### Interface
 
@@ -55,6 +55,11 @@ Data objects (immutable dataclasses or Pydantic models):
   failure; a failed automatic-continuation hop is classified by its cause like a
   direct error, and a retryable cause is not retried because earlier hops are
   already billed
+
+Only `server` imports FastMCP. It may also import `starlette` and `uvicorn`,
+FastMCP's own HTTP stack, for health routes, middleware and serving the ASGI
+app. Every package `server` imports directly is a direct, exactly pinned
+dependency.
 
 Gemini-specific SDK types, grounding steps and transport details stay inside the
 adapter. Tests use a `FakeProvider` with preset results and errors. The first
