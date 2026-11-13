@@ -39,7 +39,12 @@ from gemini_search_mcp.provider import (
     UrlAnalysisResult,
     Usage,
 )
-from gemini_search_mcp.server import TOOL_CALL_LOGGER_NAME, build_server, configure_logging
+from gemini_search_mcp.server import (
+    HTTP_CLIENT_LOGGER_NAMES,
+    TOOL_CALL_LOGGER_NAME,
+    build_server,
+    configure_logging,
+)
 from gemini_search_mcp.urlpolicy import resolve_redirects
 
 FAKE_KEY = "fake-gemini-key-AIzaSyFAKE0123456789"
@@ -61,7 +66,14 @@ CONFIG_VARIABLES = (
 )
 
 HTTP_CLIENT_LOGGERS = ("httpx", "httpx2", "httpcore", "httpcore.connection")
-WATCHED_LOGGERS = (*HTTP_CLIENT_LOGGERS, "gemini_search_mcp.other", TOOL_CALL_LOGGER_NAME)
+SDK_DEBUG_LOGGER = "google.genai"
+WATCHED_LOGGERS = (
+    *HTTP_CLIENT_LOGGERS,
+    *HTTP_CLIENT_LOGGER_NAMES,
+    SDK_DEBUG_LOGGER,
+    "gemini_search_mcp.other",
+    TOOL_CALL_LOGGER_NAME,
+)
 
 QUERY = "capital of France"
 TARGET_URL = "https://example.com/page"
@@ -157,6 +169,27 @@ def test_ac1_http_client_loggers_drop_info_and_debug_but_write_warning(
     assert line["level"] == "warning"
     assert line["logger"] == logger_name
     assert line["message"] == f"warning record for {logger_name}"
+
+
+# F1: the SDK's own debug logger "google.genai" (GOOGLE_GENAI_DEBUG) is capped too
+
+
+@pytest.mark.parametrize("level", ["info", "debug"])
+def test_f1_google_genai_sdk_logger_is_capped_at_every_level(
+    log_stream: io.StringIO, level: Any
+) -> None:
+    configure_logging(level, log_stream)
+    logger = logging.getLogger(SDK_DEBUG_LOGGER)
+
+    logger.debug("request headers x-goog-api-key: %s", FAKE_KEY)
+    logger.info("request https://example.com/secret-path")
+    assert log_stream.getvalue() == ""
+
+    logger.warning("sdk warning")
+    (line,) = _log_lines(log_stream)
+    assert line["level"] == "warning"
+    assert line["logger"] == SDK_DEBUG_LOGGER
+    assert FAKE_KEY not in log_stream.getvalue()
 
 
 # AC2: a search with real redirect resolution writes exactly one line
