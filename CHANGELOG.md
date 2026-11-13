@@ -41,4 +41,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (`STRICT=1` adds `--strict`).
 - #4: Asynchronous Gemini adapter in `gemini_client.py` implementing the
   provider interface from ADR 0009 for Search Grounding and URL Context, with
-  the operating limits from ADR 0006 and fully testable offline.
+  the operating limits from ADR 0006 and fully testable offline. The adapter
+  pins the Gemini API version `v1` explicitly (ADR 0006).

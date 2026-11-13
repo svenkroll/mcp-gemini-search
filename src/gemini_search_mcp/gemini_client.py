@@ -2,9 +2,11 @@
 
 This module is the only place that talks to the Gemini Developer API. It uses
 exclusively the asynchronous client (ADR 0006): every request goes through
-``client.aio.interactions`` of the Google GenAI SDK and its ``create`` method;
-the synchronous client is never touched. Gemini-specific SDK types never leave
-this module (ADR 0009).
+``client.aio.interactions`` of the Google GenAI SDK and its ``create`` method,
+that is the Interactions API (``POST /{api_version}/interactions``), never
+``generate_content``. The API version is pinned explicitly to ``v1``
+(:data:`GEMINI_API_VERSION`); the synchronous client is never touched.
+Gemini-specific SDK types never leave this module (ADR 0009).
 
 Facts verified against the source code of the pinned SDK ``google-genai`` 3.3.0
 in the installed package; nothing deviates from the "Verified facts" of
@@ -69,6 +71,15 @@ PROVIDER_NAME = "gemini"
 
 GEMINI_SDK_VERSION = "3.3.0"
 """Pinned ``google-genai`` version this adapter is verified against (issue #4)."""
+
+GEMINI_API_VERSION = "v1"
+"""Gemini Developer API version used for every Interactions API request (ADR 0006).
+
+Pinned explicitly in :class:`types.HttpOptions`. An explicit option overrides
+both the SDK default (``GOOGLE_AI_API_DEFAULT_VERSION``) and the
+``GOOGLE_GENAI_API_VERSION`` environment variable, so neither an SDK upgrade
+nor the environment can silently move the adapter to another API surface.
+"""
 
 URL_CONTEXT_INSTRUCTION = (
     "Answer the question below only from the content retrieved from the given URL. "
@@ -439,11 +450,14 @@ class GeminiProvider:
         lazily so construction of the adapter stays offline. The API key comes
         from ``settings.gemini_api_key`` and never reaches a log record.
 
-        Postcondition: the returned client performs no retries of its own, so
-        the attempt counting of :meth:`_send` stays exact; the adapter owns
-        retries, backoff and ``Retry-After``.
+        Postcondition: requests go to ``GEMINI_API_VERSION`` regardless of the
+        SDK default and ``GOOGLE_GENAI_API_VERSION``, and the returned client
+        performs no retries of its own, so the attempt counting of
+        :meth:`_send` stays exact; the adapter owns retries, backoff and
+        ``Retry-After``.
         """
         http_options = types.HttpOptions(
+            api_version=GEMINI_API_VERSION,
             retry_options=types.HttpRetryOptions(attempts=1),
         )
         client = genai.Client(

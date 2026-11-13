@@ -58,6 +58,14 @@ token costs are separate.
   retrieved URL. PDF is a supported content type.
 - Free tier: inputs and outputs may be used for product improvement; paid tier:
   not. Search Grounding still stores prompt, context and output for 30 days.
+- API version (as of 2026-11-13): `v1`. Verified against the `google-genai`
+  3.3.0 source (`GOOGLE_AI_API_DEFAULT_VERSION = 'v1'` in `_api_client.py`,
+  environment override `GOOGLE_GENAI_API_VERSION`, interactions route
+  `/{api_version}/interactions`) and the API versions documentation (Interactions
+  API GA in `v1`, Google Search and URL Context supported in `v1`). A manual
+  live smoke test on 2026-11-13 against `v1` returned `url_citation`
+  annotations with start and end index, `google_search_call` queries and a
+  `url_context_result` step.
 
 The adapter re-checks these facts against the pinned SDK; a deviation is
 reported instead of guessed.
@@ -79,5 +87,9 @@ Google's terms are checked against the current primary source before release.
 
 - [Gemini 3.8 Flash](https://ai.google.dev/gemini-api/docs/models/gemini-3.8-flash)
 - [Google Gen AI SDK](https://googleapis.github.io/python-genai/)
+- [API versions explained](https://ai.google.dev/gemini-api/docs/api-versions)
+- [Interactions API reference, v1](https://ai.google.dev/api/interactions-api-v1)
+- [Grounding with Google Search](https://ai.google.dev/gemini-api/docs/google-search)
+- [URL context](https://ai.google.dev/gemini-api/docs/url-context)
 - [Gemini API Pricing](https://ai.google.dev/gemini-api/docs/pricing)
 - [Gemini API Terms](https://ai.google.dev/gemini-api/terms)

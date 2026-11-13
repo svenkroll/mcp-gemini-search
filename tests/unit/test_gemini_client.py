@@ -24,7 +24,11 @@ from google.genai.errors import (
 )
 
 from gemini_search_mcp.config import Settings
-from gemini_search_mcp.gemini_client import URL_CONTEXT_INSTRUCTION, GeminiProvider
+from gemini_search_mcp.gemini_client import (
+    GEMINI_API_VERSION,
+    URL_CONTEXT_INSTRUCTION,
+    GeminiProvider,
+)
 from gemini_search_mcp.provider import ProviderError, Usage
 
 FIXTURES = Path(__file__).resolve().parents[1] / "fixtures" / "gemini"
@@ -499,6 +503,36 @@ def test_ec6_missing_or_unparseable_retry_after_uses_backoff_with_jitter() -> No
         assert len(fake.calls) == 2
         assert len(sleeper.delays) == 1
         assert 1.0 <= sleeper.delays[0] < 2.0
+
+
+def test_api_version_is_pinned_in_http_options(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The adapter passes the pinned API version and no SDK retries explicitly."""
+    captured: dict[str, Any] = {}
+
+    class _FakeClient:
+        def __init__(self, **kwargs: Any) -> None:
+            captured.update(kwargs)
+            self.aio = type("_Aio", (), {"interactions": object()})()
+
+    monkeypatch.setattr("google.genai.Client", _FakeClient)
+
+    GeminiProvider(_settings())._default_interactions()
+
+    http_options = captured["http_options"]
+    assert http_options.api_version == GEMINI_API_VERSION
+    assert http_options.retry_options.attempts == 1
+
+
+def test_api_version_env_override_does_not_change_pinned_version(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """GOOGLE_GENAI_API_VERSION cannot move the real client off the pinned version."""
+    monkeypatch.setenv("GOOGLE_GENAI_API_VERSION", "beta")
+
+    interactions_client: Any = GeminiProvider(_settings())._default_interactions()
+
+    resolved = interactions_client.sdk_configuration.globals.api_version
+    assert resolved == GEMINI_API_VERSION
 
 
 def test_default_client_stays_open_after_construction() -> None:
