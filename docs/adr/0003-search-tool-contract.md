@@ -58,6 +58,24 @@ missing grounding metadata or discarding useful partial results.
   with umlauts) returned a largest `end_index` equal to the byte length of the
   answer and larger than its character count. The slice must therefore be
   taken from `answer.encode("utf-8")` and decoded again.
+  The adapter validates every citation against the UTF-8 bytes of `answer`
+  and drops it when the URL is missing or empty, an index is missing,
+  `0 <= start_index < end_index <= len(answer_bytes)` does not hold, or the
+  byte slice is not strict UTF-8 (an index inside a multi-byte character).
+  Dropped citations are counted per reason in one debug log record without
+  content; a response whose citations are all dropped has empty `sources` and
+  still succeeds.
+- Offset base for answers with several text blocks: **undecidable** (decision
+  of 2026-11-13, method: probe script `eval/probe_citation_offsets.py` from
+  #29, `LIVE=1 uv run python eval/probe_citation_offsets.py --repeat 3` against
+  `gemini-3.8-flash`). All 21 interactions returned exactly one text block at
+  offset 0 (undecidable: 21, global: 0, per_block: 0, inconsistent: 0). No block
+  with a byte offset greater than 0 was observed, so it is unknown whether
+  indices are relative to the whole answer or to their own block. The adapter
+  therefore applies no offset correction (indices are taken as relative to the
+  whole answer) and writes a debug log record with numbers only when a block
+  with a byte offset greater than 0 carries annotations. The open question is
+  tracked as TD-005.
 - `search_queries`: the search queries Gemini actually executed.
 
 If sources, evidence or search queries are missing, the respective list is
