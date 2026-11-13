@@ -24,10 +24,17 @@ Validation of the indices themselves is deliberately deferred (TD-004).
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from types import MappingProxyType
-from typing import Any, Protocol, Self
+from typing import Any, Protocol, Self, cast
+from urllib.parse import urlsplit
 
 from gemini_search_mcp.provider import Citation, SearchProvider, Usage
-from gemini_search_mcp.urlpolicy import resolve_redirects
+from gemini_search_mcp.tools.errors import InvalidInputError, tool_error_from_exception
+from gemini_search_mcp.urlpolicy import (
+    REDIRECT_ALLOWLIST,
+    UrlRejectedError,
+    check_url,
+    resolve_redirects,
+)
 
 QUERY_MAX_LENGTH = 4000
 """Maximum length of the trimmed query in Unicode code points (``len(str)``)."""
@@ -144,7 +151,19 @@ class SearchInput:
     max_sources: int = MAX_SOURCES_DEFAULT
 
     def __post_init__(self) -> None:
-        raise NotImplementedError
+        query: object = self.query
+        if not isinstance(query, str):
+            raise InvalidInputError("query", "must be a string")
+        trimmed = query.strip()
+        if len(trimmed) < QUERY_MIN_LENGTH:
+            raise InvalidInputError("query", "must not be empty")
+        if len(trimmed) > QUERY_MAX_LENGTH:
+            raise InvalidInputError("query", "must have at most 4000 characters")
+        if type(self.max_sources) is not int:
+            raise InvalidInputError("max_sources", "must be an integer")
+        if not MAX_SOURCES_MIN <= self.max_sources <= MAX_SOURCES_MAX:
+            raise InvalidInputError("max_sources", "must be between 1 and 10")
+        object.__setattr__(self, "query", trimmed)
 
     @classmethod
     def from_arguments(cls, arguments: Mapping[str, object]) -> Self:
@@ -162,7 +181,10 @@ class SearchInput:
         Raises:
             InvalidInputError: on the first violated rule.
         """
-        raise NotImplementedError
+        if "query" not in arguments:
+            raise InvalidInputError("query", "is required")
+        max_sources = arguments.get("max_sources", MAX_SOURCES_DEFAULT)
+        return cls(query=cast(str, arguments["query"]), max_sources=cast(int, max_sources))
 
 
 @dataclass(frozen=True, slots=True)
@@ -220,7 +242,25 @@ class SearchOutput:
         Keys and nesting exactly as in the ADR; the tool text content is the
         same object serialized as JSON.
         """
-        raise NotImplementedError
+        return {
+            "answer": self.answer,
+            "sources": [
+                {
+                    "title": source.title,
+                    "url": source.url,
+                    "evidence": [
+                        {
+                            "text": item.text,
+                            "start_index": item.start_index,
+                            "end_index": item.end_index,
+                        }
+                        for item in source.evidence
+                    ],
+                }
+                for source in self.sources
+            ],
+            "search_queries": list(self.search_queries),
+        }
 
 
 @dataclass(frozen=True, slots=True)
@@ -289,7 +329,25 @@ async def run_search(
 
     Cancellation (``asyncio.CancelledError``) propagates unmapped.
     """
-    raise NotImplementedError
+    try:
+        result = await provider.search(tool_input.query)
+        sources = await build_sources(
+            result.citations,
+            result.answer,
+            tool_input.max_sources,
+            resolver=resolver,
+        )
+    except Exception as error:
+        raise tool_error_from_exception(error) from error
+    return SearchToolResult(
+        output=SearchOutput(
+            answer=result.answer,
+            sources=sources,
+            search_queries=list(result.search_queries),
+        ),
+        usage=result.usage,
+        model=result.model,
+    )
 
 
 async def build_sources(
@@ -326,7 +384,46 @@ async def build_sources(
     citation; a dropped citation contributes no evidence; target URLs are
     unique; ``len(result) <= max_sources``.
     """
-    raise NotImplementedError
+    checked: list[tuple[Citation, str]] = []
+    for citation in citations:
+        try:
+            checked.append((citation, check_url(citation.url)))
+        except UrlRejectedError:
+            continue
+
+    redirect_urls = [url for _, url in checked if _is_grounding_redirect(url)]
+    resolved: Mapping[str, str | None] = {}
+    if redirect_urls:
+        resolved = await resolver(list(dict.fromkeys(redirect_urls)))
+
+    sources: dict[str, Source] = {}
+    for citation, url in checked:
+        target: str | None = url
+        if _is_grounding_redirect(url):
+            target = resolved.get(url)
+            if target is None:
+                continue
+            try:
+                target = check_url(target)
+            except UrlRejectedError:
+                continue
+        evidence = Evidence(
+            text=evidence_text(answer, citation.start_index, citation.end_index),
+            start_index=citation.start_index,
+            end_index=citation.end_index,
+        )
+        source = sources.get(target)
+        if source is None:
+            sources[target] = Source(title=citation.title, url=target, evidence=[evidence])
+        else:
+            source.evidence.append(evidence)
+
+    return list(sources.values())[:max_sources]
+
+
+def _is_grounding_redirect(url: str) -> bool:
+    """Return whether the normalized ``url`` points to a redirect allowlist host."""
+    return urlsplit(url).hostname in REDIRECT_ALLOWLIST
 
 
 def evidence_text(answer: str, start_index: int, end_index: int) -> str:
@@ -339,4 +436,5 @@ def evidence_text(answer: str, start_index: int, end_index: int) -> str:
     yields ``""``. Never raises for any integer offsets (TD-004 defers the
     validation of offsets).
     """
-    raise NotImplementedError
+    data = answer.encode("utf-8")
+    return data[max(start_index, 0) : max(end_index, 0)].decode("utf-8", errors="replace")

@@ -31,7 +31,7 @@ from collections.abc import Mapping
 from types import MappingProxyType
 from typing import Literal
 
-from gemini_search_mcp.provider import ProviderErrorKind
+from gemini_search_mcp.provider import ProviderError, ProviderErrorKind
 
 ErrorCode = Literal[
     "invalid_input",
@@ -121,10 +121,13 @@ class ToolError(Exception):
     message: str
 
     def __init__(self, code: FixedMessageCode) -> None:
-        raise NotImplementedError
+        message = ERROR_MESSAGES[code]
+        super().__init__(message)
+        self.code = code
+        self.message = message
 
     def __str__(self) -> str:
-        raise NotImplementedError
+        return self.message
 
     def to_payload(self, request_id: str) -> dict[str, dict[str, str]]:
         """Return the ADR 0007 error object for the tool result text content.
@@ -136,7 +139,13 @@ class ToolError(Exception):
             ``{"error": {"code": code, "message": message, "request_id":
             request_id}}`` with exactly these three keys, nothing else.
         """
-        raise NotImplementedError
+        return {
+            "error": {
+                "code": self.code,
+                "message": self.message,
+                "request_id": request_id,
+            }
+        }
 
 
 class InvalidInputError(ToolError):
@@ -157,7 +166,12 @@ class InvalidInputError(ToolError):
     rule: InputRule
 
     def __init__(self, field: InputField, rule: InputRule) -> None:
-        raise NotImplementedError
+        message = INVALID_INPUT_MESSAGE_TEMPLATE.format(field=field, rule=rule)
+        Exception.__init__(self, message)
+        self.code = "invalid_input"
+        self.message = message
+        self.field = field
+        self.rule = rule
 
 
 def tool_error_from_exception(error: Exception) -> ToolError:
@@ -177,4 +191,11 @@ def tool_error_from_exception(error: Exception) -> ToolError:
     Only ``Exception`` is accepted: cancellation (``asyncio.CancelledError``)
     and other ``BaseException`` subclasses must propagate and are never mapped.
     """
-    raise NotImplementedError
+    if isinstance(error, ToolError):
+        return error
+    if isinstance(error, ProviderError):
+        mapped = ToolError(PROVIDER_ERROR_CODES[error.kind])
+    else:
+        mapped = ToolError("internal_error")
+    mapped.__cause__ = error
+    return mapped

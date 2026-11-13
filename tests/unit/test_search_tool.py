@@ -795,7 +795,10 @@ def test_ec3_evidence_text_with_emoji_and_german_umlauts() -> None:
 
 def test_ec3_evidence_text_covering_multibyte_characters_is_decoded() -> None:
     answer = "x Köln y"
-    sources = _sources([_cite("https://example.com/a", "A", 2, 8)], answer=answer)
+    needle = "Köln".encode()
+    start = answer.encode("utf-8").index(needle)
+    end = start + len(needle)  # end index is exclusive
+    sources = _sources([_cite("https://example.com/a", "A", start, end)], answer=answer)
 
     assert sources[0].evidence[0].text == "Köln"
 
