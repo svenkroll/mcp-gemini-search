@@ -19,12 +19,13 @@ the orchestrator stops with `CONTRACT_INCOMPLETE`.
 - **Test paths:** `tests/`
 - **Protected test configuration:** `tests/conftest.py`, `Makefile`,
   the `[tool.pytest.*]` and `[tool.coverage.*]` sections of `pyproject.toml`,
-  `.github/workflows/`
+  `.github/workflows/`, `scripts/ci/`
 - **Dependency files:** `uv.lock`, the `[project] dependencies` and
   `[dependency-groups]` entries of `pyproject.toml`
 - **Minimum coverage:** 80 % for `src/gemini_search_mcp/`, enforced by
   `--cov-fail-under=80`. This is the only coverage threshold.
-- **Lint (check only):** `make lint`
+- **Lint (check only):** `make lint` (Ruff for Python, shellcheck for every
+  `*.sh` file under `scripts/`)
 - **Format (modifying):** `make format`
 - **Further gate commands:** `make typecheck`
 - **Base branch:** `main`
@@ -51,6 +52,10 @@ Tickets are exclusively GitHub issues in this repository, based on the template
 1. your issue including comments
 2. the ADRs under `docs/adr/` listed in the issue's "Context" section
 3. `docs/techdebt.md`
+
+Changes to `Dockerfile`, `.dockerignore`, `compose.yaml`, `Caddyfile`,
+`.github/workflows/` or `scripts/ci/` always require reading ADR 0011, even if
+the issue does not list it.
 
 The ADRs are the working basis. Whether an ADR is accepted and in which order
 issues are worked on is decided by the project owner. Deviating from an ADR
@@ -109,6 +114,9 @@ contradicts the ADRs, the ADRs win.
   mock details.
 - Live Gemini calls happen only in explicitly manual steps (evaluation run,
   end-to-end test), never in unit tests or CI.
+- CI logic lives in Bash scripts under `scripts/ci/`; workflows call these
+  scripts and contain no logic beyond a few lines (ADR 0011). Scripts pass
+  shellcheck.
 
 ## Documentation and Changes
 

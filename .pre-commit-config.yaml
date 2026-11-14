@@ -18,3 +18,9 @@ repos:
         language: system
         types: [python]
         pass_filenames: false
+
+      - id: shellcheck
+        name: shellcheck
+        entry: uv run shellcheck
+        language: system
+        files: ^scripts/.*\.sh$
