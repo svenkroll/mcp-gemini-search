@@ -19,6 +19,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   following ADR 0011 with its logic in `scripts/ci/`. `docs/runbook.md`
   describes secrets, the local start, proxy timeouts and header pass-through
   for Caddy, Traefik and HAProxy, Kubernetes probes and local CI runs.
+  Changes under `scripts/ci/` or `.github/workflows/` run every container step
+  (ADR 0011).
 
 ### Fixed
 

@@ -20,6 +20,8 @@
 #                (linux/amd64 build, Hadolint, image scan, smoke test)
 #   build_arm64  Dockerfile, .dockerignore, uv.lock
 #   proxy_test   Caddyfile, compose.yaml
+#   all three    scripts/ci/ (including scripts/ci/proxy-stub/), .github/workflows/
+#                (the CI tooling itself; every step runs)
 #
 # Environment:
 #   GITHUB_OUTPUT  Optional. When set, the three key=value lines are also
@@ -45,6 +47,7 @@ set -euo pipefail
 readonly AMD64_PATHS=(Dockerfile .dockerignore pyproject.toml uv.lock src/)
 readonly ARM64_PATHS=(Dockerfile .dockerignore uv.lock)
 readonly PROXY_PATHS=(Caddyfile compose.yaml)
+readonly CI_PATHS=(scripts/ci/ .github/workflows/)
 
 usage() {
   echo "usage: scripts/ci/detect-changes.sh <base-ref> [<head-ref>] | --all" >&2
@@ -98,6 +101,11 @@ else
   # -z with quotePath off lists paths unquoted, also non-ASCII ones.
   git -c core.quotePath=false diff --name-only -z --no-renames "${base}...${head}" -- \
     >"$changed" || exit 2
+  if touches "$changed" "${CI_PATHS[@]}"; then
+    build_amd64=true
+    build_arm64=true
+    proxy_test=true
+  fi
   if touches "$changed" "${AMD64_PATHS[@]}"; then build_amd64=true; fi
   if touches "$changed" "${ARM64_PATHS[@]}"; then build_arm64=true; fi
   if touches "$changed" "${PROXY_PATHS[@]}"; then proxy_test=true; fi

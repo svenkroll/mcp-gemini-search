@@ -328,6 +328,7 @@ run everything.
 | linux/amd64 build, Hadolint, image scan, smoke test | `Dockerfile`, `.dockerignore`, `pyproject.toml`, `uv.lock`, `src/` |
 | linux/arm64 build | `Dockerfile`, `.dockerignore`, `uv.lock` |
 | proxy test | `Caddyfile`, `compose.yaml` |
+| every step above | `scripts/ci/` (including `scripts/ci/proxy-stub/`), `.github/workflows/` |
 
 A pull request that changes none of these paths ends the `container` job
 successfully without building.
