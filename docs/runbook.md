@@ -165,8 +165,13 @@ Every reverse proxy in front of the server must satisfy two rules from
 ### Caddy
 
 This is what the repository `Caddyfile` does, and what `scripts/ci/proxy-test.sh`
-verifies in CI (a response delayed by 75 seconds arrives complete and the
-three headers arrive unchanged):
+verifies in CI. The test sends two requests at once: one with
+`Accept: application/json, text/event-stream`, which the server answers with
+a plain JSON body and no response header until the result is ready (so
+`response_header_timeout` and `read_timeout` matter), and one with
+`Accept: text/event-stream`, which opens a stream and stays silent. Both
+responses are delayed by 75 seconds and must arrive complete with the three
+headers unchanged:
 
 ```caddyfile
 :8080 {
@@ -279,12 +284,12 @@ besides `make install`: Docker (Compose v2 for the proxy test), `curl` and
 | --- | --- | --- |
 | Select steps from a diff | `scripts/ci/detect-changes.sh origin/main` | three `key=value` lines on stdout; with only documentation changed, all `false` and `container: nothing to build` on stderr |
 | Select every step | `scripts/ci/detect-changes.sh --all` | all three values `true` |
-| Dockerfile lint | `scripts/ci/hadolint.sh` | no output; every finding of any severity fails |
+| Dockerfile lint | `scripts/ci/hadolint.sh` | no output; every finding of any severity fails, inline `hadolint ignore` pragmas are disabled |
 | Build | `docker build -t gemini-search-mcp:ci .` | image built for your host architecture |
 | Build arm64 on an amd64 host | `docker buildx build --platform linux/arm64 .` | builds under emulation; CI builds natively on an arm64 runner |
 | Image scan | `scripts/ci/scan-image.sh gemini-search-mcp:ci` | report of CRITICAL and HIGH findings; exit 1 only for CRITICAL |
 | Smoke test | `scripts/ci/smoke-test.sh gemini-search-mcp:ci` | four `ok:` lines: non-root user, exit code 2 without `GEMINI_API_KEY`, `/health/ready` 200 with a read-only filesystem, `/mcp` without token 401 |
-| Proxy test | `scripts/ci/proxy-test.sh` | six `ok:` lines; takes about 80 seconds, needs host port 8080 |
+| Proxy test | `scripts/ci/proxy-test.sh` | fifteen `ok: json: ...` and `ok: sse: ...` lines; takes about 80 seconds, needs host port 8080 |
 | Aggregate results | `scripts/ci/require-success.sh a=success b=skipped` | exit 0; `failure` or `cancelled` gives exit 1 |
 
 Details per script are in its header comment. Useful variables:
@@ -299,6 +304,19 @@ Details per script are in its header comment. Useful variables:
 The proxy test runs the repository `Caddyfile` against a fake backend
 (`scripts/ci/proxy-stub/backend.py`) in its own image, so it needs no build, no
 `.env` and no Gemini key.
+
+To check the detection yourself, including a non-ASCII path, use a scratch
+repository (paths are read NUL-delimited, so names with umlauts or newlines
+still match):
+
+```bash
+d=$(mktemp -d) && git -C "$d" init -q -b main
+git -C "$d" commit -q --allow-empty -m base
+git -C "$d" checkout -q -b change && mkdir -p "$d/src/pkg" && touch "$d/src/pkg/ü.py"
+git -C "$d" add -A && git -C "$d" commit -q -m change
+(cd "$d" && "$OLDPWD/scripts/ci/detect-changes.sh" main change)
+# expected: build_amd64=true, build_arm64=false, proxy_test=false
+```
 
 ### Which paths trigger which step
 
@@ -316,7 +334,12 @@ successfully without building.
 
 ### Updating pinned images
 
-Container images are pinned by digest: the `Dockerfile` (uv and Python),
+The uv version appears twice and the two must be updated together: as the
+digest-pinned image in the `Dockerfile` and as the checksum-pinned tarball in
+the `check` job of `.github/workflows/ci.yml`.
+
+Container images are pinned by digest: the `Dockerfile` (uv and Python, the
+Python digest once in the `PYTHON_IMAGE` argument),
 `compose.yaml` (Caddy), `scripts/ci/hadolint.sh`, `scripts/ci/scan-image.sh` and
 `scripts/ci/proxy-stub/compose.yaml` (stub image). Find a new digest with
 `docker buildx imagetools inspect <image>:<tag>` and change the digest and the

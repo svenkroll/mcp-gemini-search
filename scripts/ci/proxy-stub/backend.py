@@ -90,7 +90,34 @@ def _make_handler(delay_seconds: int) -> type[BaseHTTPRequestHandler]:
             except ValueError, AttributeError:
                 request_id = None
             received = {name: self.headers.get(name) for name in _HEADERS}
+            result = {
+                "jsonrpc": "2.0",
+                "id": request_id,
+                "result": {"received_headers": received},
+            }
+            payload = json.dumps(result, separators=(",", ":"))
+            accept = (self.headers.get("Accept") or "").lower()
 
+            if "application/json" in accept:
+                self._answer_json(payload)
+            elif "text/event-stream" in accept:
+                self._answer_sse(payload)
+            else:
+                self.send_response(406)
+                self.send_header("Content-Length", "0")
+                self.end_headers()
+
+        def _answer_json(self, payload: str) -> None:
+            # Nothing is sent, not even the status line, until the delay is over.
+            time.sleep(delay_seconds)
+            data = payload.encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(data)))
+            self.end_headers()
+            self.wfile.write(data)
+
+        def _answer_sse(self, payload: str) -> None:
             # No Content-Length: the stream ends when the connection closes.
             self.send_response(200)
             self.send_header("Content-Type", "text/event-stream")
@@ -99,16 +126,8 @@ def _make_handler(delay_seconds: int) -> type[BaseHTTPRequestHandler]:
             self.end_headers()
             self.wfile.write(b": waiting\n\n")
             self.wfile.flush()
-
             time.sleep(delay_seconds)
-
-            result = {
-                "jsonrpc": "2.0",
-                "id": request_id,
-                "result": {"received_headers": received},
-            }
-            event = f"event: message\ndata: {json.dumps(result, separators=(',', ':'))}\n\n"
-            self.wfile.write(event.encode())
+            self.wfile.write(f"event: message\ndata: {payload}\n\n".encode())
             self.wfile.flush()
             self.close_connection = True
 

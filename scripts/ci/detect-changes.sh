@@ -52,12 +52,13 @@ usage() {
 }
 
 # touches <changed-paths-file> <entry>...: succeeds when a changed path equals
-# an entry or lies below a directory entry ending in "/".
+# an entry or lies below a directory entry ending in "/". The file holds
+# NUL-delimited paths.
 touches() {
   local changed=$1 entry path
   shift
   for entry in "$@"; do
-    while IFS= read -r path; do
+    while IFS= read -r -d '' path; do
       if [[ $entry == */ ]]; then
         [[ $path == "$entry"* ]] && return 0
       else
@@ -94,7 +95,9 @@ else
   changed=$(mktemp)
   trap 'rm -f "$changed"' EXIT
   # --no-renames lists both sides of a rename, so a moved file still matches.
-  git diff --name-only --no-renames "${base}...${head}" -- >"$changed" || exit 2
+  # -z with quotePath off lists paths unquoted, also non-ASCII ones.
+  git -c core.quotePath=false diff --name-only -z --no-renames "${base}...${head}" -- \
+    >"$changed" || exit 2
   if touches "$changed" "${AMD64_PATHS[@]}"; then build_amd64=true; fi
   if touches "$changed" "${ARM64_PATHS[@]}"; then build_arm64=true; fi
   if touches "$changed" "${PROXY_PATHS[@]}"; then proxy_test=true; fi

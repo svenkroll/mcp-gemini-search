@@ -532,7 +532,7 @@ docker compose up --build
 curl -i http://127.0.0.1:8080/health/ready
 ```
 
-Caddy listens on `127.0.0.1:8080` and forwards `/mcp` to the server. The
+Caddy listens on `127.0.0.1:8080` and forwards requests to the server. The
 `Caddyfile` sets long read timeouts (330 seconds) and does not buffer the
 response, because a tool call answers with a server-sent-events stream that
 can stay silent for as long as `GEMINI_TIMEOUT_SECONDS` (at most 300). Any

@@ -12,7 +12,8 @@
 #   Runs the official Hadolint image, pinned by digest in a readonly variable
 #   at the top of this script (the single source of that digest), with the
 #   Dockerfile on stdin and failure threshold "style", so every finding of
-#   any severity fails. No repository Hadolint configuration is read.
+#   any severity fails. No repository Hadolint configuration is read and
+#   inline "hadolint ignore" pragmas in the Dockerfile are disabled.
 #
 # Environment: none.
 #
@@ -49,4 +50,4 @@ docker info >/dev/null 2>&1 || {
 
 # The Dockerfile arrives on stdin, so the container sees no repository file and
 # reads no repository Hadolint configuration.
-docker run --quiet --rm -i "$HADOLINT_IMAGE" hadolint --failure-threshold style - <"$dockerfile"
+docker run --quiet --rm -i "$HADOLINT_IMAGE" hadolint --disable-ignore-pragma --failure-threshold style - <"$dockerfile"

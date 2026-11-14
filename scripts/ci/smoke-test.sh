@@ -113,7 +113,8 @@ fi
 # Check 3: a start with a read-only root filesystem serves /health/ready.
 docker run --detach --name "$server_container" --read-only \
   --publish "127.0.0.1:$port:8000" \
-  --env GEMINI_API_KEY --env MCP_BEARER_TOKEN "$image" >/dev/null
+  --env GEMINI_API_KEY --env MCP_BEARER_TOKEN "$image" >/dev/null ||
+  fail "read-only container starts"
 ready=false
 for ((waited = 0; waited < start_timeout; waited++)); do
   status=$(curl --silent --output /dev/null --write-out '%{http_code}' --max-time 2 \

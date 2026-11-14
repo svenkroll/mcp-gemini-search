@@ -104,14 +104,11 @@ cleanup() {
 }
 trap cleanup EXIT
 
-# fail <check>: report the check; the log is printed by the exit trap.
-fail() {
-  echo "fail: $1"
+if ! compose up --detach --wait >/dev/null; then
+  echo "fail: stack starts"
   failed=true
   exit 1
-}
-
-compose up --detach --wait >/dev/null || fail "stack starts"
+fi
 
 # Caddy has no health check: wait until it answers at all.
 for ((tries = 0; tries < 30; tries++)); do
@@ -121,42 +118,74 @@ for ((tries = 0; tries < 30; tries++)); do
   sleep 1
 done
 
-body='{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"search","arguments":{"query":"proxy test"}}}'
-started=$(date +%s)
-curl_exit=0
-status=$(curl --silent --show-error --no-buffer --output "$work/response" \
-  --write-out '%{http_code}' --max-time "$((delay + 60))" \
-  --request POST --header 'Content-Type: application/json' \
-  --header 'Accept: application/json, text/event-stream' \
-  --header "MCP-Protocol-Version: $PROTOCOL_VERSION" \
-  --header "Mcp-Method: $METHOD" \
-  --header "Mcp-Name: $NAME" \
-  --data "$body" "$URL") || curl_exit=$?
-elapsed=$(($(date +%s) - started))
+# send <request> <accept>: one POST /mcp through Caddy; writes the response
+# headers, the body and "<curl exit> <status> <seconds>" below $work/<request>.
+send() {
+  local request=$1 accept=$2 started status curl_exit=0
+  local body='{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"search","arguments":{"query":"proxy test"}}}'
+  started=$(date +%s)
+  status=$(curl --silent --show-error --no-buffer \
+    --dump-header "$work/$request.headers" --output "$work/$request.body" \
+    --write-out '%{http_code}' --max-time "$((delay + 60))" \
+    --request POST --header 'Content-Type: application/json' \
+    --header "Accept: $accept" \
+    --header "MCP-Protocol-Version: $PROTOCOL_VERSION" \
+    --header "Mcp-Method: $METHOD" \
+    --header "Mcp-Name: $NAME" \
+    --data "$body" "$URL" 2>"$work/$request.curl-error") || curl_exit=$?
+  echo "$curl_exit ${status:-000} $(($(date +%s) - started))" >"$work/$request.result"
+}
 
-if [[ $curl_exit -eq 0 && $status == 200 ]]; then
-  echo "ok: response status 200 and stream complete"
-else
-  fail "response status 200 and stream complete (curl exit $curl_exit, status ${status:-none})"
-fi
+# Both requests run at the same time, so the test takes about one delay.
+send json 'application/json, text/event-stream' &
+json_pid=$!
+send sse 'text/event-stream' &
+sse_pid=$!
+wait "$json_pid" "$sse_pid"
 
-if [[ $elapsed -ge $delay ]]; then
-  echo "ok: response held for at least ${delay}s through Caddy (${elapsed}s)"
-else
-  fail "response held for at least ${delay}s through Caddy (${elapsed}s)"
-fi
+problems=false
 
-if grep -qF '"result":' "$work/response" && grep -qF '"id":1,' "$work/response"; then
-  echo "ok: final result event received"
-else
-  fail "final result event received"
-fi
-
-for pair in "MCP-Protocol-Version:$PROTOCOL_VERSION" "Mcp-Method:$METHOD" "Mcp-Name:$NAME"; do
-  expected="\"${pair%%:*}\":\"${pair#*:}\""
-  if grep -qF "$expected" "$work/response"; then
-    echo "ok: header ${pair%%:*} passed through unchanged"
+# check <request> <description> <command...>: print ok or fail for one check.
+check() {
+  local request=$1 description=$2
+  shift 2
+  if "$@"; then
+    echo "ok: $request: $description"
   else
-    fail "header ${pair%%:*} passed through unchanged"
+    echo "fail: $request: $description"
+    problems=true
   fi
+}
+
+for request in json sse; do
+  read -r curl_exit status elapsed <"$work/$request.result"
+  if [[ $request == json ]]; then
+    content_type='application/json'
+    body_marker='^{"jsonrpc":"2.0","id":1,"result":'
+  else
+    content_type='text/event-stream'
+    body_marker='^data: {"jsonrpc":"2.0","id":1,"result":'
+  fi
+
+  check "$request" "response complete with status 200 (curl exit $curl_exit, status $status)" \
+    test "$curl_exit" -eq 0 -a "$status" = 200
+  check "$request" "Content-Type is $content_type" \
+    grep -qi "^content-type: *$content_type" "$work/$request.headers"
+  check "$request" "held for at least ${delay}s through Caddy (${elapsed}s)" \
+    test "$elapsed" -ge "$delay"
+  check "$request" "JSON-RPC result received" \
+    grep -q "$body_marker" "$work/$request.body"
+  if [[ $request == sse ]]; then
+    check "$request" "final event is event: message" \
+      grep -q '^event: message' "$work/$request.body"
+  fi
+  for pair in "MCP-Protocol-Version:$PROTOCOL_VERSION" "Mcp-Method:$METHOD" "Mcp-Name:$NAME"; do
+    check "$request" "header ${pair%%:*} passed through unchanged" \
+      grep -qF "\"${pair%%:*}\":\"${pair#*:}\"" "$work/$request.body"
+  done
 done
+
+if [[ $problems == true ]]; then
+  failed=true
+  exit 1
+fi
