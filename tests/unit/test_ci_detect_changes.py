@@ -5,6 +5,8 @@ import shutil
 import subprocess
 from pathlib import Path
 
+import pytest
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = REPO_ROOT / "scripts" / "ci" / "detect-changes.sh"
 
@@ -60,7 +62,7 @@ def _repo_with_change(tmp_path: Path, changed: str) -> Path:
     return repo
 
 
-def test_f3_non_ascii_path_under_src_selects_amd64_build(tmp_path: Path) -> None:
+def test_non_ascii_path_under_src_selects_amd64_build(tmp_path: Path) -> None:
     repo = _repo_with_change(tmp_path, "src/gemini_search_mcp/ü.py")
 
     result = _detect(repo, "HEAD~1")
@@ -86,3 +88,24 @@ def test_ec4_unrelated_change_selects_nothing(tmp_path: Path) -> None:
         "proxy_test=false",
     ]
     assert result.stderr.strip() == "container: nothing to build"
+
+
+@pytest.mark.parametrize(
+    "changed",
+    [
+        "scripts/ci/detect-changes.sh",
+        "scripts/ci/proxy-stub/backend.py",
+        ".github/workflows/ci.yml",
+    ],
+)
+def test_ci_tooling_change_selects_every_container_step(tmp_path: Path, changed: str) -> None:
+    repo = _repo_with_change(tmp_path, changed)
+
+    result = _detect(repo, "HEAD~1")
+
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.splitlines() == [
+        "build_amd64=true",
+        "build_arm64=true",
+        "proxy_test=true",
+    ]
