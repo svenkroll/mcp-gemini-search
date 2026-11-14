@@ -94,6 +94,18 @@ facts only. It must say that the tool:
 - fails for paywalled content, private or local addresses, video and audio;
 - treats retrieved content as untrusted; instructions in it are not followed
   (ADR 0008).
+- says when to use it: the caller already has the URL and needs one specific
+  piece of information from the page, for example when its own fetch cannot load
+  it or it does not want the whole page in its context; without a URL, the
+  caller uses `search`;
+- answers only from the retrieved content; when the content does not answer the
+  question, the answer says so explicitly;
+- may truncate long documents during retrieval.
+
+Reason for the last three facts: in the eval case `analyze-url-html-004` (Keep a
+Changelog, an encoding the document does not specify) the tool answered that
+the document does not specify it, and the description neither said that this
+happens nor when the tool fits (live run 2026-11-14, issue #37).
 
 The description must not claim that the tool is cheaper and must not recommend
 using it by default or in preference to the caller's own fetch.
