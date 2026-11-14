@@ -62,7 +62,8 @@ and never logs them.
 listens on `127.0.0.1:8080` and forwards to it.
 
 Prerequisites: Docker with Compose v2, a Gemini API key of a project on the paid
-tier (see the README, [Costs](../README.md#costs)).
+tier (see the README, [Costs](../README.md#costs)), and uv (`make install`) for
+the example client in step 4.
 
 1. Create the configuration and fill in the two secrets:
 
@@ -131,7 +132,41 @@ tier (see the README, [Costs](../README.md#costs)).
    Any other MCP client works the same way: URL `http://127.0.0.1:8080/mcp`,
    header `Authorization: Bearer <MCP_BEARER_TOKEN>`.
 
-5. Stop with `Ctrl+C`, then `docker compose down`.
+5. Optional, no Gemini call: check that Caddy does not cut off a call longer
+   than 60 seconds. This starts a stub in place of the server that answers
+   `/mcp` only after 75 seconds; CI runs the same check in the step "Proxy test"
+   of the job `container`. Stop the Compose stack first (`docker compose down`).
+
+   ```bash
+   docker network create proxytest
+   docker run --rm --detach --name server --network proxytest --entrypoint python \
+     gemini-search-mcp:local -u -c '
+   import http.server, time
+   class H(http.server.BaseHTTPRequestHandler):
+       def do_POST(self):
+           time.sleep(75)
+           self.send_response(200)
+           self.send_header("Content-Type", "text/event-stream")
+           self.end_headers()
+           self.wfile.write(b"event: message\ndata: done\n\n")
+       def do_GET(self):
+           self.send_response(200)
+           self.send_header("Content-Length", "0")
+           self.end_headers()
+   http.server.ThreadingHTTPServer(("0.0.0.0", 8000), H).serve_forever()'
+   docker run --rm --detach --name caddy --network proxytest \
+     --publish 127.0.0.1:8080:8080 --volume "$PWD/Caddyfile:/etc/caddy/Caddyfile:ro" \
+     caddy:2.11.9-alpine
+   curl -sS --max-time 120 -X POST -w '\n%{http_code} after %{time_total} s\n' \
+     http://127.0.0.1:8080/mcp
+   docker rm --force server caddy && docker network rm proxytest
+   ```
+
+   Expected: after about 75 seconds the output is `event: message`,
+   `data: done` and `200 after 75... s`. A proxy that cuts the call off answers
+   502 or 504 earlier, or the connection ends without a body.
+
+6. Stop with `Ctrl+C`, then `docker compose down`.
 
 Without `.env`, `docker compose up` stops with an error naming the missing
 file. Without `GEMINI_API_KEY` in it, the `server` container exits with code 2
@@ -163,6 +198,13 @@ about 8 s to resolve grounding redirects. A proxy in front must therefore
 - pass `MCP-Protocol-Version`, `Mcp-Method` and `Mcp-Name` through unchanged
   ([ADR 0002](adr/0002-mcp-framework-and-transport.md)), and not drop or rewrite
   `Authorization` ([ADR 0008](adr/0008-security.md)).
+
+A proxy that terminates TLS in front of the server changes what the server
+sees: the connection to the server is plain `http`. The server compares an
+`Origin` header with the scheme and host of that connection (ADR 0002), so a
+browser request with `Origin: https://...` is answered with HTTP 403 behind such
+a proxy. MCP clients that are not browsers send no `Origin` header and are not
+affected.
 
 A client that gives up earlier abandons the call, but the server may already
 have spent Gemini quota on it.

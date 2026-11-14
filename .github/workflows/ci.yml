@@ -134,7 +134,74 @@ jobs:
           test "$unauthorized" = 401
 
           # Neither secret value may appear in the container log.
-          if docker logs smoke 2>&1 | grep -q -e "$token" -e dummy-key-for-smoke-test; then
+          docker logs smoke >/tmp/smoke.log 2>&1
+          if grep -q -e "$token" -e dummy-key-for-smoke-test /tmp/smoke.log; then
             echo "secret value found in the container log"
             exit 1
           fi
+
+      - name: Proxy test, tool call longer than 60 seconds through Caddy
+        run: |
+          set -euo pipefail
+          # Stub backend reachable as server:8000, like the server in compose.yaml. It
+          # answers /mcp only after 75 s, with one event-stream chunk that echoes the
+          # MCP headers it received. /ready answers at once for the start-up wait.
+          cat >/tmp/stub.py <<'PY'
+          import http.server
+          import json
+          import time
+
+
+          class Handler(http.server.BaseHTTPRequestHandler):
+              def do_POST(self):
+                  if self.path != "/mcp":
+                      self.send_error(404)
+                      return
+                  time.sleep(75)
+                  body = json.dumps(
+                      {
+                          "protocol": self.headers.get("MCP-Protocol-Version"),
+                          "method": self.headers.get("Mcp-Method"),
+                          "name": self.headers.get("Mcp-Name"),
+                      },
+                      separators=(",", ":"),
+                  )
+                  self.send_response(200)
+                  self.send_header("Content-Type", "text/event-stream")
+                  self.end_headers()
+                  self.wfile.write(f"event: message\ndata: {body}\n\n".encode())
+
+              def do_GET(self):
+                  self.send_response(200)
+                  self.send_header("Content-Length", "0")
+                  self.end_headers()
+
+
+          http.server.ThreadingHTTPServer(("0.0.0.0", 8000), Handler).serve_forever()
+          PY
+          trap 'docker logs caddy || true; docker rm --force server caddy || true; docker network rm ec3 || true' EXIT
+          docker network create ec3
+          docker run --detach --name server --network ec3 --entrypoint python             --volume /tmp/stub.py:/stub.py:ro "$IMAGE" -u /stub.py
+          caddy_image=$(sed -n 's/^    image: \(caddy:.*\)$/\1/p' compose.yaml)
+          echo "Caddy image: $caddy_image"
+          docker run --detach --name caddy --network ec3 --publish 127.0.0.1:8080:8080             --volume "$PWD/Caddyfile:/etc/caddy/Caddyfile:ro" "$caddy_image"
+
+          ready=000
+          for _ in $(seq 1 30); do
+            ready=$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8080/ready || true)
+            test "$ready" = 200 && break
+            sleep 1
+          done
+          test "$ready" = 200
+
+          # Caddy must keep the request open past 60 s and pass the MCP headers unchanged.
+          curl -sS --max-time 120 -X POST \
+            -H 'MCP-Protocol-Version: 2026-07-28' -H 'Mcp-Method: tools/call' -H 'Mcp-Name: search' \
+            -o /tmp/proxied.body -w '%{http_code} %{time_total}\n' \
+            http://127.0.0.1:8080/mcp | tee /tmp/proxied.status
+          read -r code seconds < /tmp/proxied.status
+          test "$code" = 200
+          test "${seconds%.*}" -ge 70
+          printf 'event: message\ndata: {"protocol":"2026-07-28","method":"tools/call","name":"search"}\n\n' \
+            >/tmp/proxied.expected
+          diff /tmp/proxied.expected /tmp/proxied.body
