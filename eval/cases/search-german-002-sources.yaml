@@ -1,0 +1,15 @@
+id: search-german-002-sources
+tool: search
+category: german
+input:
+  query: |-
+    In welchem RFC ist HTTP/3 spezifiziert, und auf welchem Transportprotokoll baut es auf?
+
+    Answer only from Google Search results. Cite the primary source of truth (official documentation, standards body or publisher of record) where the answer can be checked.
+expected: HTTP/3 ist in RFC 9114 spezifiziert und baut auf dem Transportprotokoll QUIC auf.
+allowed_sources:
+- rfc-editor.org
+- ietf.org
+ground_truth_date: 2026-11-12
+expected_outcome: answer_with_sources
+draft: true

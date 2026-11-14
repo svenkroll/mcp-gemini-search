@@ -1,0 +1,14 @@
+id: search-techdocs-001-sources
+tool: search
+category: tech_docs
+input:
+  query: |-
+    According to the Python 3.14 documentation of built-in functions, what does len() return?
+
+    Answer only from Google Search results. Cite the primary source of truth (official documentation, standards body or publisher of record) where the answer can be checked.
+expected: len() returns the length (the number of items) of an object.
+allowed_sources:
+- python.org
+ground_truth_date: 2026-11-12
+expected_outcome: answer_with_sources
+draft: true

@@ -3,8 +3,9 @@
 This directory holds the ground-truth catalog for evaluating the Gemini
 Search MCP server (ADR 0005). Cases live in `eval/cases/`, the format and
 validator in [`eval/catalog.py`](catalog.py), the evaluation script is
-[`eval/run_eval.py`](run_eval.py). This document covers the case format, how
-to maintain the catalog and how to run and score an evaluation.
+[`eval/run_eval.py`](run_eval.py). This document covers the case format, the
+variant cases, how to maintain the catalog and how to run and score an
+evaluation.
 
 ## Case Format
 
@@ -21,11 +22,16 @@ including `.yml`, are rejected. Required fields per ADR 0005:
 | `expected` | Core statement in one sentence; for unknowns and errors the expected behavior |
 | `allowed_sources` | Non-empty list of allowed domains; for `analyze_url` the host of the analyzed test URL |
 | `ground_truth_date` | Reference date of the core statement, ISO date (`YYYY-MM-DD`) |
-| `expected_outcome` | `answer`, `honest_unknown` or `error:<code>` with a code from ADR 0007: `invalid_input`, `url_not_allowed`, `url_unreachable`, `url_unsafe`, `upstream_unavailable`, `upstream_error`, `internal_error` |
+| `expected_outcome` | `answer`, `answer_with_sources` (only for `search`), `honest_unknown` or `error:<code>` with a code from ADR 0007: `invalid_input`, `url_not_allowed`, `url_unreachable`, `url_unsafe`, `upstream_unavailable`, `upstream_error`, `internal_error` |
 
-Optional field: `draft: true` marks an example case. Drafts are valid without
-`--strict` and rejected by it, so the catalog must be draft-free before the
-project owner's real evaluation run.
+`answer_with_sources` marks a `search` case whose question asks for sources;
+on an `analyze_url` case it is an error. It exists only in the evaluation,
+never in the server, a tool schema or a tool description.
+
+Optional field: `draft: true` marks an example case or a `-sources` variant
+the project owner has not verified yet. Drafts are valid without `--strict`
+and rejected by it, so the catalog must be draft-free before the project
+owner's real evaluation run.
 
 Example:
 
@@ -43,6 +49,106 @@ ground_truth_date: 2026-11-10
 expected_outcome: answer
 draft: true
 ```
+
+## Variant Cases
+
+`search` is measured the way it is meant to be used (ADR 0005, "Variants"): a
+plain question gets an answer, a question that asks for sources gets an answer
+with sources, a question that asks for a confirmed fact gets that fact or "not
+publicly known". The plain questions are the base cases. Each of them has one
+variant that repeats its question and appends a fixed request:
+
+| | `-sources` variant | `-fact` variant |
+| --- | --- | --- |
+| Base case | every `search` case with `expected_outcome: answer` | every `search` case with `expected_outcome: honest_unknown` |
+| `id` / file | `<base id>-sources` / `<base id>-sources.yaml` | `<base id>-fact` / `<base id>-fact.yaml` |
+| `tool`, `category`, `ground_truth_date` | copied from the base | copied from the base |
+| `input.query` | base query, a blank line, `SOURCES_SUFFIX` | base query, a blank line, `FACT_SUFFIX` |
+| `expected` | copied from the base | `The tool states that the figure is not publicly known and gives no figure.` |
+| `expected_outcome` | `answer_with_sources` | `honest_unknown` |
+| `allowed_sources` | official documentation, standards body or publisher of record for `expected` | copied from the base |
+
+`SOURCES_SUFFIX` and `FACT_SUFFIX` are constants in
+[`eval/catalog.py`](catalog.py):
+
+```text
+Answer only from Google Search results. Cite the primary source of truth (official documentation, standards body or publisher of record) where the answer can be checked.
+```
+
+```text
+Answer only with a fact a source confirms; if none does, say it is not publicly known.
+```
+
+Example of a `-sources` variant; the block scalar `|-` keeps the blank line
+and adds no trailing newline:
+
+```yaml
+id: search-stable-001-sources
+tool: search
+category: stable_fact
+input:
+  query: |-
+    In which year was RFC 1035 published?
+
+    Answer only from Google Search results. Cite the primary source of truth (official documentation, standards body or publisher of record) where the answer can be checked.
+expected: RFC 1035 was published in November 1987.
+allowed_sources:
+- rfc-editor.org
+- ietf.org
+ground_truth_date: 2026-11-12
+expected_outcome: answer_with_sources
+```
+
+Strict mode checks the pairing; every violation is an error that names file,
+field and rule:
+
+- every `search` `answer` case has exactly one `<id>-sources` case and every
+  `search` `honest_unknown` case exactly one `<id>-fact` case;
+- every variant has its base case, the base is not a variant itself
+  (`...-sources-sources`, `...-fact-sources`) and has the right outcome
+  (`-fact` on an `answer` case and `-sources` on an `honest_unknown` case are
+  errors);
+- a variant has the same `category` as its base, a `-sources` variant also the
+  same `expected`;
+- a variant's query is exactly the base query, a blank line and the suffix.
+
+In strict mode an id that ends with `-sources` or `-fact` always denotes a
+variant. When you add a `search` case with `answer` or `honest_unknown`, add
+its variant in the same change; when you refresh `expected` of a base case,
+update its `-sources` variant with it. Because `-` sorts before `.`, a variant
+is listed and run directly before its base case.
+
+### Verifying a `-sources` variant
+
+A new `-sources` variant is a draft: its `allowed_sources` are a proposal.
+Whether Gemini returns an authoritative source for the question can only be
+established live, so the project owner verifies every variant once (live,
+paid Gemini calls, ADR 0006; never run by agents). The summary script is the
+project owner's and is not part of this repository:
+
+1. Run every `-sources` variant once and keep the output:
+
+   ```bash
+   mkdir -p eval/runs/$(date +%F)-sources-verification
+   for f in eval/cases/*-sources.yaml; do
+     id=$(basename "$f" .yaml)
+     q=$(uv run python -c "import sys,yaml; print(yaml.safe_load(open(sys.argv[1]))['input']['query'])" "$f")
+     LIVE=1 uv run python .issue-drafts/search_summary.py "$q" > "eval/runs/$(date +%F)-sources-verification/$id.txt"
+   done
+   ```
+
+2. For each file: did a search run (`grounding` is not `NONE`), and does the
+   `sources` list contain an authoritative host for `expected`? Set
+   `allowed_sources` in the case file to the registrable domains of those
+   hosts and delete `draft: true`. If no authoritative host came back, note it
+   and leave the draft in place.
+3. Write `eval/runs/<date>-sources-verification/README.md` with one row per
+   variant: returned hosts and chosen `allowed_sources`.
+4. Run `make eval-validate STRICT=1` until it is green and commit the case
+   files together with the verification directory.
+
+`-fact` variants need no verification: their `allowed_sources` are copied from
+the base and no source is scored for `honest_unknown`.
 
 ## `analyze_url` Cases
 
@@ -65,7 +171,9 @@ that include the `url_html`, `url_pdf` and `url_failure` categories must set
 | `url_failure` | `analyze_url` on URLs that cannot be retrieved | 3 |
 
 The minimum distribution sums to at least 41 cases; it is only enforced in
-strict mode.
+strict mode. A variant has the category of its base case and counts in it;
+the repository's catalog holds 41 base cases, 26 `-sources` and 4 `-fact`
+variants.
 
 ## Adding a URL case
 
@@ -146,7 +254,7 @@ tests (ADR 0008).
 
 ```bash
 uv run python eval/catalog.py          # warnings allowed
-uv run python eval/catalog.py --strict # no warnings-only tolerance, no drafts, minimum distribution
+uv run python eval/catalog.py --strict # also: no drafts, minimum distribution, variant pairing
 make eval-validate                     # same as the first command
 make eval-validate STRICT=1            # same as --strict
 ```
@@ -155,7 +263,9 @@ Exit code is 0 when there are no errors; warnings alone keep it 0. Every
 error and warning names file, field and rule, for example:
 
 ```text
-error: analyze-url-html-001.yaml: expected_outcome: must be answer, honest_unknown or error:<code> with a code from ADR 0007
+error: analyze-url-html-001.yaml: expected_outcome: must be answer, answer_with_sources (tool search only), honest_unknown or error:<code> with a code from ADR 0007
+error: search-stable-001.yaml: id: a search answer case requires the variant case search-stable-001-sources
+error: search-stable-002-sources.yaml: input.query: must be the query of the base case search-stable-002, a blank line and SOURCES_SUFFIX
 warning: search-current-001.yaml: ground_truth_date: older than 90 days for a current_fact; refresh the case
 ```
 
@@ -192,8 +302,10 @@ LIVE=1 GEMINI_API_KEY=... uv run python eval/run_eval.py run --name smoke \
   unknown id aborts before the server starts. Without `--case` all cases run.
 - `--name <name>` names the run directory (default `run`). Allowed characters:
   letters, digits, `.`, `_` and `-`, starting with a letter or digit.
-- The catalog is validated with `--strict` first; drafts or a missing minimum
-  distribution abort the run before the server starts.
+- The catalog is validated with `--strict` first; drafts, a missing minimum
+  distribution or a violated variant pairing rule abort the run before the
+  server starts. A run is therefore only possible once every `-sources`
+  variant is verified.
 - The server runs with your environment plus `MCP_TRANSPORT=stdio` and
   `ANALYZE_URL_ENABLED=true`, so include at least one `analyze_url` case.
 - `make eval ARGS="--name smoke --case <id>"` does the same.
@@ -220,23 +332,30 @@ an overview table with one row per case. Each case has a section
 `## Case <id>` with the question or URL, `expected`, `allowed_sources`, the
 answer, the returned sources and the automatic results.
 
-Which metrics you score depends on `expected_outcome`; everything else is
-`n/a` and does not count in the denominator:
+Which metrics you score depends on the tool and `expected_outcome`; everything
+else is `n/a` and does not count in the denominator:
 
-| `expected_outcome` | correctness | groundedness | source quality | honesty |
-| --- | --- | --- | --- | --- |
-| `answer` | manual | manual | automatic | `n/a` |
-| `honest_unknown` | `n/a` | `n/a` | `n/a` | manual |
-| `error:<code>` | automatic | `n/a` | `n/a` | `n/a` |
+| tool | `expected_outcome` | correctness | groundedness | source quality | honesty |
+| --- | --- | --- | --- | --- | --- |
+| `search` | `answer` | manual | `n/a` | `n/a` | `n/a` |
+| `search` | `answer_with_sources` | manual | manual | automatic | `n/a` |
+| `analyze_url` | `answer` | manual | manual | automatic | `n/a` |
+| any | `honest_unknown` | `n/a` | `n/a` | `n/a` | manual |
+| any | `error:<code>` | automatic | `n/a` | `n/a` | `n/a` |
+
+A plain `search` `answer` case does not ask for sources. The review still
+lists the sources it returned, but nothing is scored from them.
 
 Automatic checks: an `error:<code>` case passes correctness when the returned
-error code equals the expected one; source quality (only for `answer` cases)
-passes when at least one returned source is within `allowed_sources` (a
-subdomain such as `www.rfc-editor.org` counts for `rfc-editor.org`) and no
-returned source is a Google grounding redirect URL. Further sources outside
-`allowed_sources` do not fail it; an `answer` case without any returned source
-fails it. An `answer` case that returns a tool error fails correctness,
-groundedness and source quality.
+error code equals the expected one; source quality (only for `search`
+`answer_with_sources` and `analyze_url` `answer` cases) passes when at least
+one returned source is within `allowed_sources` (a subdomain such as
+`www.rfc-editor.org` counts for `rfc-editor.org`) and no returned source is a
+Google grounding redirect URL. Further sources outside `allowed_sources` do
+not fail it; a case without any returned source fails it. A tool error fails
+correctness on a `search` `answer` case, and correctness, groundedness and
+source quality on a `search` `answer_with_sources` or `analyze_url` `answer`
+case.
 
 For every manual metric the section has one verdict line, initially empty:
 
@@ -254,7 +373,11 @@ Write `pass` or `fail` after the colon, optionally followed by a short note:
 
 Only exactly `pass` and `fail` (lower case) are accepted; `Pass`, `pas`,
 `passed` or `pass,` are invalid. Judge correctness against `expected`, and
-groundedness by whether the returned evidence supports the core statement. Do
+groundedness by whether the returned evidence supports the core statement.
+Judge honesty by the kind of case: a base `honest_unknown` case passes when
+the answer presents no invented value as fact (a figure clearly labeled as an
+estimate is not an invention); a `-fact` variant passes only when the answer
+says that the answer is not publicly known and gives no figure. Do
 not edit anything else in the file: headings of the form `## Case <id>` and the
 verdict lines are what `score` reads. Text inside code fences comes from the
 case, the web or the model and is ignored by `score`.

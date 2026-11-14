@@ -1,0 +1,16 @@
+# Next expected change: Debian 14 (forky), expected around mid-2027.
+# Re-verify and update expected + ground_truth_date when the 90-day warning appears.
+id: search-current-002-sources
+tool: search
+category: current_fact
+input:
+  query: |-
+    What is the current stable release of Debian?
+
+    Answer only from Google Search results. Cite the primary source of truth (official documentation, standards body or publisher of record) where the answer can be checked.
+expected: Debian 13 (codename trixie) is the current stable release of Debian.
+allowed_sources:
+- debian.org
+ground_truth_date: 2026-11-12
+expected_outcome: answer_with_sources
+draft: true

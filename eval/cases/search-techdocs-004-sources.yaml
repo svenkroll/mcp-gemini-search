@@ -1,0 +1,14 @@
+id: search-techdocs-004-sources
+tool: search
+category: tech_docs
+input:
+  query: |-
+    According to PEP 8, how many spaces should be used per indentation level in Python code?
+
+    Answer only from Google Search results. Cite the primary source of truth (official documentation, standards body or publisher of record) where the answer can be checked.
+expected: PEP 8 specifies 4 spaces per indentation level.
+allowed_sources:
+- python.org
+ground_truth_date: 2026-11-12
+expected_outcome: answer_with_sources
+draft: true

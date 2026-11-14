@@ -1,4 +1,4 @@
-"""Evaluation script: automatic checks and manual scoring (ADR 0005, issue #10).
+"""Evaluation script: automatic checks and manual scoring (ADR 0005, issues #10 and #36).
 
 Two subcommands, no evaluation framework and no LLM judge:
 
@@ -26,21 +26,24 @@ Two subcommands, no evaluation framework and no LLM judge:
     against :data:`THRESHOLDS`, and writes ``report.md`` into the run
     directory.
 
-Metrics, applicability and automatic checks follow the table of issue #10 as
-amended by the project owner (ADR 0005, fix round 1):
+Which metric applies depends on tool and ``expected_outcome`` (ADR 0005,
+issue #36):
 
-=================  ===========  ============  ==============  =======
-expected_outcome   correctness  groundedness  source_quality  honesty
-=================  ===========  ============  ==============  =======
-``answer``         manual       manual        automatic       n/a
-``honest_unknown`` n/a          n/a           n/a             manual
-``error:<code>``   automatic    n/a           n/a             n/a
-=================  ===========  ============  ==============  =======
+===============  =======================  ===========  ============  ==============  =======
+tool             expected_outcome         correctness  groundedness  source_quality  honesty
+===============  =======================  ===========  ============  ==============  =======
+``search``       ``answer``               manual       n/a           n/a             n/a
+``search``       ``answer_with_sources``  manual       manual        automatic       n/a
+``analyze_url``  ``answer``               manual       manual        automatic       n/a
+any              ``honest_unknown``       n/a          n/a           n/a             manual
+any              ``error:<code>``         automatic    n/a           n/a             n/a
+===============  =======================  ===========  ============  ==============  =======
 
-Source quality passes when no returned source is a grounding redirect URL and
-at least one returned source lies within ``allowed_sources``; otherwise it
-fails, so an ``answer`` case without returned sources (including a tool error
-or a failed call) fails it.
+A plain ``search`` question does not ask for sources, so nothing is scored
+from the sources it returns anyway. Source quality passes when no returned
+source is a grounding redirect URL and at least one returned source lies
+within ``allowed_sources``; otherwise it fails, so a case it applies to fails
+it without returned sources (including a tool error or a failed call).
 
 Like :mod:`catalog`, this file is not part of a package and never imports
 ``gemini_search_mcp``: it measures exactly what an MCP client receives.
@@ -389,7 +392,8 @@ class CaseRecord:
         id: case id.
         tool: ``search`` or ``analyze_url``.
         category: catalog category.
-        expected_outcome: ``answer``, ``honest_unknown`` or ``error:<code>``.
+        expected_outcome: ``answer``, ``answer_with_sources``,
+            ``honest_unknown`` or ``error:<code>``.
         input: the tool arguments sent, i.e. the case ``input`` mapping
             (``{"query"}`` or ``{"url", "question"}``).
         expected: the case's ``expected`` text.
@@ -573,18 +577,24 @@ class ScoreReport:
 # --- automatic checks -------------------------------------------------------
 
 
-def applicability(expected_outcome: str) -> dict[Metric, Applicability]:
+def applicability(tool: str, expected_outcome: str) -> dict[Metric, Applicability]:
     """Return how each metric is decided for a case, per the module docstring table.
 
-    Depends only on ``expected_outcome``, never on the call result.
+    Depends only on ``tool`` and ``expected_outcome``, never on the call
+    result.
 
     Args:
-        expected_outcome: ``answer``, ``honest_unknown`` or ``error:<code>``.
+        tool: ``search`` or ``analyze_url``.
+        expected_outcome: ``answer``, ``answer_with_sources`` (``search``
+            only), ``honest_unknown`` or ``error:<code>``.
 
     Returns:
         One entry per metric of :data:`METRICS`:
 
-        - ``answer``: correctness ``manual``, groundedness ``manual``,
+        - ``search`` with ``answer``: correctness ``manual``, every other
+          metric ``n/a`` (with and without returned sources);
+        - ``search`` with ``answer_with_sources`` and ``analyze_url`` with
+          ``answer``: correctness ``manual``, groundedness ``manual``,
           source_quality ``automatic``, honesty ``n/a``;
         - ``honest_unknown``: correctness ``n/a``, groundedness ``n/a``,
           source_quality ``n/a`` (with and without returned sources),
@@ -593,9 +603,19 @@ def applicability(expected_outcome: str) -> dict[Metric, Applicability]:
           ``n/a``.
 
     Raises:
-        ValueError: for any other ``expected_outcome``.
+        ValueError: for any other ``tool``, any other ``expected_outcome``
+            and for ``answer_with_sources`` on ``analyze_url``.
     """
-    if expected_outcome == "answer":
+    if tool not in ("search", "analyze_url"):
+        raise ValueError(f"unknown tool {tool!r}")
+    if tool == "search" and expected_outcome == "answer":
+        return {
+            "correctness": "manual",
+            "groundedness": "n/a",
+            "source_quality": "n/a",
+            "honesty": "n/a",
+        }
+    if (tool, expected_outcome) in (("search", "answer_with_sources"), ("analyze_url", "answer")):
         return {
             "correctness": "manual",
             "groundedness": "manual",
@@ -616,7 +636,7 @@ def applicability(expected_outcome: str) -> dict[Metric, Applicability]:
             "source_quality": "n/a",
             "honesty": "n/a",
         }
-    raise ValueError(f"unknown expected_outcome {expected_outcome!r}")
+    raise ValueError(f"unknown expected_outcome {expected_outcome!r} for tool {tool!r}")
 
 
 def _host(url: str) -> str | None:
@@ -729,6 +749,7 @@ def check_error_code(
 
 def automatic_checks(
     *,
+    tool: str,
     expected_outcome: str,
     outcome: CallOutcome,
     sources: Sequence[str],
@@ -737,21 +758,27 @@ def automatic_checks(
 ) -> dict[Metric, MetricStatus]:
     """Return the status of every metric after the checks that need no LLM.
 
-    Starts from :func:`applicability` of ``expected_outcome``:
+    Starts from :func:`applicability` of ``tool`` and ``expected_outcome``:
     ``n/a`` stays ``n/a``, ``manual`` becomes ``manual``, ``automatic`` is
     decided by :func:`check_source_quality` (source_quality) or
     :func:`check_error_code` (correctness of ``error:<code>``). Then:
 
-    - ``answer`` case with ``outcome == "tool_error"``: correctness and
-      groundedness are ``fail`` (no manual verdict needed); source_quality
-      is ``fail`` as well, because a tool error returns no sources
+    - ``answer`` or ``answer_with_sources`` case with
+      ``outcome == "tool_error"``: every ``manual`` metric is ``fail`` (no
+      manual verdict needed). That is correctness for a ``search``
+      ``answer`` case, and correctness and groundedness where groundedness
+      applies; source_quality, where it applies, is ``fail`` as well,
+      because a tool error returns no sources
       (:func:`check_source_quality` of an empty list);
     - any case with ``outcome == "call_failed"``: every metric that is not
       ``n/a`` is ``fail``.
 
     Returns one entry per metric of :data:`METRICS`.
+
+    Raises:
+        ValueError: as :func:`applicability`.
     """
-    decided = applicability(expected_outcome)
+    decided = applicability(tool, expected_outcome)
     checks: dict[Metric, MetricStatus] = {}
     for metric in METRICS:
         if decided[metric] == "n/a":
@@ -764,9 +791,10 @@ def automatic_checks(
             checks[metric] = check_error_code(expected_outcome, outcome, error_json)
     if outcome == "call_failed":
         return {metric: "n/a" if status == "n/a" else "fail" for metric, status in checks.items()}
-    if expected_outcome == "answer" and outcome == "tool_error":
-        checks["correctness"] = "fail"
-        checks["groundedness"] = "fail"
+    if expected_outcome in ("answer", "answer_with_sources") and outcome == "tool_error":
+        return {
+            metric: "fail" if status == "manual" else status for metric, status in checks.items()
+        }
     return checks
 
 
@@ -802,8 +830,8 @@ def load_strict_catalog(cases_dir: Path = CASES_DIR) -> list[Any]:
 
     Raises:
         EvalAbort: when strict validation reports at least one error (e.g.
-            drafts present); the message contains the text of every error
-            finding.
+            drafts present, a base case without its variant); the message
+            contains the text of every error finding.
     """
     errors = [
         finding
@@ -957,6 +985,7 @@ def make_record(
         output_tokens=telemetry.output_tokens if telemetry else None,
         model=telemetry.model if telemetry else None,
         checks=automatic_checks(
+            tool=case.tool,
             expected_outcome=case.expected_outcome,
             outcome=outcome,
             sources=sources,
