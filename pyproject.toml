@@ -1,6 +1,6 @@
 [project]
 name = "gemini-search-mcp"
-version = "0.0.0"
+version = "0.1.0"
 description = "MCP server exposing Gemini-backed web search and URL analysis as search and analyze_url tools."
 readme = "README.md"
 requires-python = "==3.14.*"
