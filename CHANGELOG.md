@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-11-14
+
 ### Added
 
 - #11: Multi-stage `Dockerfile` (official `python:3.14-slim-trixie`, `uv`, no dev
@@ -86,8 +88,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `AGENTS.md` translated to English and extended with the project contract for
   the agent orchestrator.
 - `.env.example` aligned with the variables from ADR 0010.
-
-### Added
 
 - #29: Probe script `eval/probe_citation_offsets.py` that measures against the
   live Gemini API whether `url_citation` indices are relative to the whole answer
