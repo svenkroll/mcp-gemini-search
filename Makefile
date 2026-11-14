@@ -16,6 +16,7 @@ format:
 lint:
 	$(UV) run ruff format --check .
 	$(UV) run ruff check .
+	if [ -d scripts ]; then find scripts -type f -name '*.sh' -exec $(UV) run shellcheck {} +; fi
 
 typecheck:
 	$(UV) run ty check

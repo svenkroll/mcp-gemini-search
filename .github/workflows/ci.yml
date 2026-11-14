@@ -21,8 +21,9 @@ jobs:
 
       - name: Install uv
         run: |
-          curl -LsSf --retry 3 -o /tmp/uv.tar.gz \
+          curl -fsSL --retry 3 -o /tmp/uv.tar.gz \
             https://github.com/astral-sh/uv/releases/download/0.13.7/uv-x86_64-unknown-linux-musl.tar.gz
+          echo "287491da03f2a785c70fa75b13e1f849918c2f2b5415fe84876b8214eeb792f9  /tmp/uv.tar.gz" | sha256sum --check --strict
           tar -xzf /tmp/uv.tar.gz -C /tmp
           install -m 755 /tmp/uv-x86_64-unknown-linux-musl/uv /tmp/uv-x86_64-unknown-linux-musl/uvx /usr/local/bin/
           uv --version

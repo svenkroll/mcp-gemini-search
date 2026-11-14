@@ -36,6 +36,7 @@ dev = [
     "pytest-cov==7.1.0",
     "pyyaml==6.0.3",
     "ruff==0.17.4",
+    "shellcheck-py==0.11.0.1",
     "ty==0.0.100",
 ]
 

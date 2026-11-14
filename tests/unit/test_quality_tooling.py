@@ -7,9 +7,17 @@ import pytest
 import yaml
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-# GitHub Actions are restricted to first-party actions/* pinned to an exact
-# 40-character commit SHA; tool installers must use pinned run steps instead.
-ALLOWED_ACTION = re.compile(r"^\s*uses:\s*actions/[\w.-]+@([0-9a-f]{40})(\s|$)")
+# Allowed actions per ADR 0011: first-party actions/* plus two named Docker
+# actions, each pinned to an exact 40-character commit SHA with a version comment.
+ALLOWED_ACTION = re.compile(
+    r"^\s*(?:-\s+)?uses:\s*"
+    r"(?:actions/[\w.-]+|docker/setup-buildx-action|docker/build-push-action)"
+    r"@[0-9a-f]{40}\s+#\s*v\S+\s*$"
+)
+
+
+def _is_allowed_action(line: str) -> bool:
+    return ALLOWED_ACTION.match(line) is not None
 
 
 def _workflow_files() -> list[Path]:
@@ -24,9 +32,53 @@ def test_at_least_one_workflow_exists() -> None:
 def test_workflow_uses_sha_pinned_actions(workflow: Path) -> None:
     for line in workflow.read_text(encoding="utf-8").splitlines():
         if "uses:" in line:
-            assert ALLOWED_ACTION.match(line), (
-                f"action must be actions/<name>@<40-char commit SHA>: {line.strip()}"
+            assert _is_allowed_action(line), (
+                "action must be on the ADR 0011 list and pinned as "
+                f"<action>@<40-char commit SHA> # v<version>: {line.strip()}"
             )
+
+
+SHA = "3d3c42e5aac5ba805825da76410c181273ba90b1"
+
+
+@pytest.mark.parametrize(
+    "line",
+    [
+        f"        uses: actions/checkout@{SHA} # v7.0.1",
+        f"      - uses: docker/setup-buildx-action@{SHA} # v3.12.0",
+        f"        uses: docker/build-push-action@{SHA} # v6.19.2",
+    ],
+)
+def test_ac3_allowed_actions_pinned_by_sha_are_accepted(line: str) -> None:
+    assert _is_allowed_action(line)
+
+
+@pytest.mark.parametrize(
+    "line",
+    [
+        f"        uses: docker/setup-qemu-action@{SHA} # v3.7.0",
+        f"        uses: docker/login-action@{SHA} # v3.6.0",
+        f"        uses: aquasecurity/trivy-action@{SHA} # v0.33.1",
+        f"        uses: actionsx/checkout@{SHA} # v7.0.1",
+    ],
+)
+def test_ec2_actions_not_on_the_list_are_rejected(line: str) -> None:
+    assert not _is_allowed_action(line)
+
+
+@pytest.mark.parametrize(
+    "line",
+    [
+        "        uses: actions/checkout@v7.0.1",
+        "        uses: docker/build-push-action@v6",
+        f"        uses: actions/checkout@{SHA[:12]} # v7.0.1",
+        f"        uses: actions/checkout@{SHA}",
+    ],
+)
+def test_ec3_tag_pins_short_shas_and_missing_version_comments_are_rejected(
+    line: str,
+) -> None:
+    assert not _is_allowed_action(line)
 
 
 def test_env_example_uses_placeholders_only() -> None:
