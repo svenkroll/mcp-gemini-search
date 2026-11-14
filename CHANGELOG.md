@@ -22,6 +22,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Changes under `scripts/ci/` or `.github/workflows/` run every container step
   (ADR 0011).
 
+- #12: Release workflow `.github/workflows/release.yml`. A pushed tag `v*` is
+  checked first (`scripts/ci/check-release-tag.sh`: SemVer without build
+  metadata, version equal to `project.version` after PEP 440 normalization,
+  commit on `main`). The image is built natively for `linux/amd64` and
+  `linux/arm64`, pushed by digest, pulled back, scanned and smoke-tested per
+  architecture; only then one manifest list is tagged with the version and the
+  commit SHA. README section "Release" describes the flow, the check of the
+  image in GHCR and the cleanup after a failed run (ADR 0011).
+
 ### Fixed
 
 - #31: The loggers of the HTTP client libraries and the Google GenAI SDK are
