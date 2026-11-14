@@ -40,6 +40,11 @@ repository.
 - Every version, digest and checksum has exactly one source.
 - Values are read with the tool that owns the file, for example
   `docker compose config --images`, never with a regular expression over YAML.
+- Exception: uv appears twice, as an image pinned by digest in the
+  `Dockerfile` and as a tarball pinned by SHA-256 in the `check` job. They are
+  different artifacts with their own pins and carry the same version; the
+  `Dockerfile` comment names the other place. A dependency update tool may
+  keep them in sync later.
 
 ### Pinning
 
@@ -59,8 +64,8 @@ Any other action requires a change of this ADR.
 
 ### Build policy
 
-- CI never pushes images to a registry. Published images come only from a
-  version tag set by the project owner; publishing is a separate decision.
+- Pull requests and pushes to `main` never push images. Only the release
+  workflow pushes (section "Release").
 - Image builds use `docker/build-push-action` with the GitHub Actions cache.
   The image used for scan and tests is the one that was built, not a second
   build.
@@ -91,6 +96,46 @@ Any other action requires a change of this ADR.
 Test helpers such as stubs and fake backends never run inside the production
 image. They use their own image, pinned by digest.
 
+### Release
+
+A release is a version tag set by the project owner. The workflow
+`.github/workflows/release.yml` builds, checks and publishes the image.
+
+- **Trigger:** only a pushed tag `v*`. No manual, branch or pull request
+  triggers.
+- **Tag check** before any build; on failure nothing is built or pushed:
+  - SemVer with `v` prefix and without build metadata (`+...`), e.g. `v1.0.0`
+    or `v1.0.0-rc.1`. Build metadata is rejected because image tags cannot
+    contain `+`.
+  - The tag version equals `project.version` in `pyproject.toml` after
+    PEP 440 normalization: tag `v1.0.0-rc.1` matches `1.0.0rc1`.
+  - The tagged commit is on `main`.
+- **Build:** one job per architecture on a native runner, no emulation. Each
+  job pushes its image by digest, without a tag, to
+  `ghcr.io/svenkroll/mcp-gemini-search`.
+- **Checks** with the same scripts as the `container` job: Hadolint on the
+  `Dockerfile` before the build; image scan and smoke test on the pushed
+  digest, pulled back from the registry, per architecture. The rules of
+  section "Image scan" apply.
+- **Publish:** only when every architecture passed, one job creates the
+  manifest list from the checked digests (`docker buildx imagetools create`)
+  with exactly two tags: the version without `v` (e.g. `1.0.0`) and the full
+  commit SHA. No `latest`, no floating tags. Pre-releases are published the
+  same way.
+- **Failed runs** leave untagged digests in GHCR; the project owner deletes
+  them manually.
+- **Labels:** `org.opencontainers.image.source` (links the package to the
+  repository before the first push), `org.opencontainers.image.version`,
+  `org.opencontainers.image.revision`.
+- **Attestations:** none (no provenance, no SBOM) until signing and SBOM are
+  decided.
+- **Permissions:** the release workflow has only `contents: read` and
+  `packages: write`. Login with `GITHUB_TOKEN` via `docker login` in a script,
+  no additional action.
+- **Visibility:** GHCR does not take over the repository visibility. The
+  project owner sets the package to public once, after the first release.
+- Deployment is not part of this ADR.
+
 ### Runtime budget
 
 A full run of the `container` job on `main` with a warm cache takes at most
@@ -107,7 +152,15 @@ A full run of the `container` job on `main` with a warm cache takes at most
   job short; documentation-only changes do not build at all.
 - Good: The image scan does not block pull requests on HIGH findings that
   appear in the vulnerability database independently of the change.
+- Good: The published image is exactly the digest that was scanned and
+  smoke-tested on its own architecture; tags are set only after every check
+  passed.
+- Good: A release cannot publish a version that differs from
+  `pyproject.toml` or a commit outside `main`.
 - Bad: Two third-party actions from Docker are part of the supply chain.
+- Bad: A failed release leaves untagged digests in GHCR that the project
+  owner removes manually.
+- Bad: The package visibility needs one manual step after the first release.
 - Bad: An unfixed CRITICAL finding blocks every image change until the project
   owner adds an exception.
 - Bad: Every change under `scripts/ci/` or `.github/workflows/` runs the full
@@ -119,7 +172,8 @@ A full run of the `container` job on `main` with a warm cache takes at most
 
 - actionlint and zizmor for workflow files, Hadolint without Docker locally
   (`docs/techdebt.md`).
-- Publishing images and their retention.
+- Signing and SBOM for published images.
+- Deployment of releases.
 
 ## More Information
 
