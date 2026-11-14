@@ -1,0 +1,24 @@
+------------------------------------------------------------------------
+query        : What is the latest Ubuntu LTS release?
+
+Answer only from Google Search results. Cite the primary source of truth (official documentation, standards body or publisher of record) where the answer can be checked.
+status       : ok
+model        : gemini-3.8-flash
+status (API) : completed
+------------------------------------------------------------------------
+duration     : total 9,970 ms | gemini 9,689 ms | sources/redirects 281 ms
+tokens       : input 283 | output 122 | thought 414 | tool_use 0 | total 819
+grounding    : google_search=2
+steps        : google_search_call -> google_search_result -> thought -> model_output
+search calls : 2
+   - Ubuntu releases list official LTS
+   - site ubuntu com list of releases
+------------------------------------------------------------------------
+citations    : 4 annotations, 2 distinct URLs (2 redirects)
+sources      : 2 after resolve/merge/check (max_sources=10)
+   1. releases.ubuntu.com              evidence=2  https://releases.ubuntu.com/
+   2. ubuntu.com                       evidence=2  https://ubuntu.com/project/docs/release-team/list-of-releases/
+------------------------------------------------------------------------
+answer       : 361 chars / 361 bytes
+  The latest Ubuntu Long-Term Support (LTS) release is **Ubuntu 26.04 LTS** (codename *Resolute Raccoon*), with its latest point release being **26.04.1 LTS**.  ### Primary Source of Truth * **Canonical / Ubuntu Official Project Documentation:** [Ubuntu List of Releases](https://ubuntu.com/project/docs) / [Ubuntu Releases Directory](https://releases.ubuntu.com)
+------------------------------------------------------------------------

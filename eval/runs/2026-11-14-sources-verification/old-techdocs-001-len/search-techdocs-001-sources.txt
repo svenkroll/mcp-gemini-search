@@ -1,0 +1,29 @@
+------------------------------------------------------------------------
+query        : According to the Python 3.14 documentation of built-in functions, what does len() return?
+
+Answer only from Google Search results. Cite the primary source of truth (official documentation, standards body or publisher of record) where the answer can be checked.
+status       : ok
+model        : gemini-3.8-flash
+status (API) : completed
+------------------------------------------------------------------------
+duration     : total 13,579 ms | gemini 13,220 ms | sources/redirects 359 ms
+tokens       : input 238 | output 203 | thought 574 | tool_use 0 | total 1015
+grounding    : google_search=4
+steps        : google_search_call -> google_search_result -> google_search_call -> google_search_result -> thought -> model_output
+search calls : 4
+   - site docs python org 3 14 library functions html len
+   - python 3 14 documentation built in functions len return
+   - site:docs.python.org/3/ "len(s)" "Return the length"
+   - "docs.python.org/3" "len(s)" "Return the length (the number of items) of an object"
+------------------------------------------------------------------------
+citations    : 7 annotations, 5 distinct URLs (5 redirects)
+sources      : 5 after resolve/merge/check (max_sources=10)
+   1. www.cs.toronto.edu               evidence=1  https://www.cs.toronto.edu/~david/course-notes/csc110-111/A-python-builtins/01-builtins.html
+   2. www.scribd.com                   evidence=2  https://www.scribd.com/document/548877139/docs-python-org-3-library-functions-html-1
+   3. www.scribd.com                   evidence=1  https://www.scribd.com/document/821604193/Built-in-Functions-Python-3-12-4-documentation
+   4. devdocs.io                       evidence=2  https://devdocs.io/python~3.14/
+   5. stackoverflow.com                evidence=1  https://stackoverflow.com/questions/22724533/how-do-i-get-a-program-to-print-the-number-of-words-in-a-sentence-and-each-word
+------------------------------------------------------------------------
+answer       : 582 chars / 584 bytes
+  According to the official Python documentation of built-in functions, **`len(s)`** returns **the length (the number of items) of an object**. The argument may be a sequence (such as a string, bytes, tuple, list, or range) or a collection (such as a dictionary, set, or frozen set).  **Primary Source of Truth:** * **Publisher:** Python Software Foundation * **Documentation Entry:** [Python Standard Library — Built-in Functions: `len()`](https://docs.python.org/3/library/functions.html#len) (accessible for Python 3.14 at `https://docs.python.org/3.14/library/functions.html#len`)
+------------------------------------------------------------------------

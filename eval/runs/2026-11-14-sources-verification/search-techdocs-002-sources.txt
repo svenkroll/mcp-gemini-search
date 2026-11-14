@@ -1,0 +1,24 @@
+------------------------------------------------------------------------
+query        : According to the Kubernetes Pod lifecycle documentation, what is the default value of a Pod's restartPolicy field?
+
+Answer only from Google Search results. Cite the primary source of truth (official documentation, standards body or publisher of record) where the answer can be checked.
+status       : ok
+model        : gemini-3.8-flash
+status (API) : completed
+------------------------------------------------------------------------
+duration     : total 10,340 ms | gemini 10,067 ms | sources/redirects 273 ms
+tokens       : input 188 | output 147 | thought 306 | tool_use 0 | total 641
+grounding    : google_search=2
+steps        : google_search_call -> google_search_result -> google_search_call -> google_search_result -> thought -> model_output
+search calls : 2
+   - kubernetes pod lifecycle restartPolicy default official documentation
+   - site:kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle/ "restartPolicy" "default"
+------------------------------------------------------------------------
+citations    : 4 annotations, 2 distinct URLs (2 redirects)
+sources      : 2 after resolve/merge/check (max_sources=10)
+   1. kubernetes.io                    evidence=3  https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle/
+   2. kubernetes.io                    evidence=1  https://kubernetes.io/docs/reference/kubernetes-api/core/pod-v1/
+------------------------------------------------------------------------
+answer       : 486 chars / 490 bytes
+  According to the official Kubernetes documentation on **Pod Lifecycle**, the default value of a Pod's `restartPolicy` field is **`Always`**.  The `spec` of a Pod allows values of `Always`, `OnFailure`, and `Never`.  ### Primary Source of Truth: * **Source:** Kubernetes Documentation — *Pod Lifecycle* ("Pod-level container restart policy" section) * **URL:** [Kubernetes: Pod Lifecycle – Restart Policy](https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle/#restart-policy)
+------------------------------------------------------------------------

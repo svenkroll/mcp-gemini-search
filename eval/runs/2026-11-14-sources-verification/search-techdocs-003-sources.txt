@@ -1,0 +1,24 @@
+------------------------------------------------------------------------
+query        : According to the PostgreSQL 18 documentation, on which TCP port does the server listen by default?
+
+Answer only from Google Search results. Cite the primary source of truth (official documentation, standards body or publisher of record) where the answer can be checked.
+status       : ok
+model        : gemini-3.8-flash
+status (API) : completed
+------------------------------------------------------------------------
+duration     : total 10,220 ms | gemini 9,936 ms | sources/redirects 284 ms
+tokens       : input 224 | output 147 | thought 492 | tool_use 0 | total 863
+grounding    : google_search=2
+steps        : google_search_call -> google_search_result -> thought -> model_output
+search calls : 2
+   - postgresql 18 documentation port default tcp postgresql org
+   - site postgresql org docs devel runtime config connection port
+------------------------------------------------------------------------
+citations    : 3 annotations, 2 distinct URLs (2 redirects)
+sources      : 2 after resolve/merge/check (max_sources=10)
+   1. www.postgresql.org               evidence=2  https://www.postgresql.org/docs/current/runtime-config-connection.html
+   2. www.postgresql.org               evidence=1  https://www.postgresql.org/docs/current/app-postgres.html
+------------------------------------------------------------------------
+answer       : 530 chars / 532 bytes
+  According to the official PostgreSQL 18 documentation, the server listens on TCP port **5432** by default.  **Primary Source of Truth:** * **PostgreSQL 18 Documentation**, *Chapter 19. Server Configuration*, Section 19.3 ("Connections and Authentication – Connection Settings", under the `port` parameter), hosted on the official PostgreSQL site ([postgresql.org](https://www.postgresql.org/docs/18/runtime-config-connection.html)).    *(It is also referenced under the `postgres` command documentation for the `-p port` option)*.
+------------------------------------------------------------------------

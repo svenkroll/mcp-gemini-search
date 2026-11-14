@@ -25,6 +25,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- #36: The evaluation measures `search` the way it is meant to be used. The
+  catalog gains the outcome `answer_with_sources` (only for `search`) and 30
+  variant cases: a `-sources` variant for each of the 26 plain `search`
+  questions and a `-fact` variant for each of the 4 `honest_unknown`
+  questions, with the fixed suffixes `SOURCES_SUFFIX` and `FACT_SUFFIX` of
+  `eval/catalog.py`. `--strict` checks the pairing of base cases and variants.
+  Scoring depends on tool and outcome: a plain `search` `answer` case is
+  scored for correctness only, groundedness and source quality apply to
+  `search` `answer_with_sources` and `analyze_url` `answer` cases. Thresholds
+  are unchanged; the server, its tool schemas and descriptions are untouched.
+  The `-sources` variants were verified against the live API on 2026-11-14
+  (`eval/runs/2026-11-14-sources-verification/`); `search-techdocs-001` asks a
+  different question since then, because the original one did not return the
+  official documentation reliably. ADR 0005 documents the variants, the applicability table and the honesty
+  criterion.
 - `analyze_url` becomes optional: `search` is the core tool, ADR 0004 defines
   the role and the facts the tool description must state, without cost claims
   or a default recommendation.

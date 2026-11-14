@@ -2,8 +2,8 @@ id: search-techdocs-001
 tool: search
 category: tech_docs
 input:
-  query: According to the Python 3.14 documentation of built-in functions, what does len() return?
-expected: len() returns the length (the number of items) of an object.
+  query: According to the Python 3.14 documentation of the json module, what is the default value of the ensure_ascii parameter of json.dumps()?
+expected: The default value of the ensure_ascii parameter of json.dumps() is True.
 allowed_sources:
 - docs.python.org
 ground_truth_date: 2026-11-12

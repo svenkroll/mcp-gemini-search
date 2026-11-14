@@ -1,0 +1,24 @@
+------------------------------------------------------------------------
+query        : According to RFC 1035, what is the maximum length of a single DNS label?
+
+Answer only from Google Search results. Cite the primary source of truth (official documentation, standards body or publisher of record) where the answer can be checked.
+status       : ok
+model        : gemini-3.8-flash
+status (API) : completed
+------------------------------------------------------------------------
+duration     : total 8,513 ms | gemini 8,240 ms | sources/redirects 273 ms
+tokens       : input 184 | output 222 | thought 266 | tool_use 0 | total 672
+grounding    : google_search=2
+steps        : google_search_call -> google_search_result -> thought -> model_output
+search calls : 2
+   - RFC 1035 label length limit octets
+   - RFC 1035 maximum length of a single label DNS
+------------------------------------------------------------------------
+citations    : 6 annotations, 2 distinct URLs (2 redirects)
+sources      : 2 after resolve/merge/check (max_sources=10)
+   1. www.rfc-editor.org               evidence=5  https://www.rfc-editor.org/info/rfc1035/
+   2. emailauth.io                     evidence=1  https://emailauth.io/knowledge/dns-and-domain-infrastructure/txt-record-length-and-label-length-errors-in-dns-control-panels
+------------------------------------------------------------------------
+answer       : 636 chars / 636 bytes
+  According to **RFC 1035**, the maximum length of a single DNS label is **63 octets** (or less).   ### Primary Source of Truth * **Publisher of Record / Standards Body:** RFC Editor / Internet Engineering Task Force (IETF) * **Specification:** [RFC 1035: *Domain Names - Implementation and Specification*](https://www.rfc-editor.org/rfc/rfc1035)   * **Section 2.3.4 ("Size limits"):** Explicitly lists `labels 63 octets or less`.   * **Section 3.1 ("Name space definitions"):** Notes that *"The high order two bits of every length octet must be zero, and the remaining six bits of the length field limit the label to 63 octets or less."*
+------------------------------------------------------------------------

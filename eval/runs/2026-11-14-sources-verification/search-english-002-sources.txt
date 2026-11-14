@@ -1,0 +1,26 @@
+------------------------------------------------------------------------
+query        : Which RFC currently specifies the HTTP/1.1 message syntax, and when was it published?
+
+Answer only from Google Search results. Cite the primary source of truth (official documentation, standards body or publisher of record) where the answer can be checked.
+status       : ok
+model        : gemini-3.8-flash
+status (API) : completed
+------------------------------------------------------------------------
+duration     : total 11,389 ms | gemini 11,072 ms | sources/redirects 318 ms
+tokens       : input 234 | output 234 | thought 496 | tool_use 0 | total 964
+grounding    : google_search=2
+steps        : google_search_call -> google_search_result -> thought -> model_output
+search calls : 2
+   - RFC 9112 publication date datatracker ietf
+   - RFC HTTP 1.1 message syntax currently specifies
+------------------------------------------------------------------------
+citations    : 7 annotations, 4 distinct URLs (4 redirects)
+sources      : 4 after resolve/merge/check (max_sources=10)
+   1. www.rfc-editor.org               evidence=2  https://www.rfc-editor.org/info/rfc9112/
+   2. datatracker.ietf.org             evidence=3  https://datatracker.ietf.org/doc/rfc9112/history/
+   3. datatracker.ietf.org             evidence=1  https://datatracker.ietf.org/doc/charter-ietf-httpbis/
+   4. datatracker.ietf.org             evidence=1  https://datatracker.ietf.org/doc/search?name=HTTP&sort=&rfcs=on&by=group&group=httpbis
+------------------------------------------------------------------------
+answer       : 571 chars / 571 bytes
+  The RFC that currently specifies the HTTP/1.1 message syntax is **RFC 9112** (titled *HTTP/1.1*, also published as STD 99), which obsoletes the message syntax portions of RFC 7230.  * **Publication Date:** June 2022 (published June 6, 2022). * **Primary Source of Truth:** The official standards document published by the RFC Editor / Internet Engineering Task Force (IETF):   * **RFC 9112 Info Page:** [RFC 9112 (RFC Editor)](https://www.rfc-editor.org/info/rfc9112)   * **Document Record:** [IETF Datatracker RFC 9112 History](https://datatracker.ietf.org/doc/rfc9112/)
+------------------------------------------------------------------------

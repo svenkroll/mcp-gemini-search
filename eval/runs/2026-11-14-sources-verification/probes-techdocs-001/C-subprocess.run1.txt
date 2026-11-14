@@ -1,0 +1,25 @@
+------------------------------------------------------------------------
+query        : According to the Python 3.14 documentation of the subprocess module, what is the default value of the timeout parameter of subprocess.run()?
+
+Answer only from Google Search results. Cite the primary source of truth (official documentation, standards body or publisher of record) where the answer can be checked.
+status       : ok
+model        : gemini-3.8-flash
+status (API) : completed
+------------------------------------------------------------------------
+duration     : total 14,408 ms | gemini 14,125 ms | sources/redirects 283 ms
+tokens       : input 334 | output 182 | thought 657 | tool_use 0 | total 1173
+grounding    : google_search=2
+steps        : google_search_call -> google_search_result -> thought -> model_output
+search calls : 2
+   - site docs python org 3 14 library subprocess html subprocess run
+   - python 3 14 documentation subprocess run timeout
+------------------------------------------------------------------------
+citations    : 4 annotations, 3 distinct URLs (2 redirects)
+sources      : 3 after resolve/merge/check (max_sources=10)
+   1. docs.python.org                  evidence=2  https://docs.python.org/3/library/subprocess.html
+   2. stackoverflow.com                evidence=1  https://stackoverflow.com/questions/74524193/how-ensure-subprocess-is-killed-on-timeout-when-using-run
+   3. github.com                       evidence=1  https://github.com/vlang/v/issues/6041
+------------------------------------------------------------------------
+answer       : 594 chars / 596 bytes
+  According to the official Python documentation for the `subprocess` module, the default value of the `timeout` parameter in `subprocess.run()` is **`None`**:  ```python subprocess.run(args, *, stdin=None, input=None, stdout=None, stderr=None, capture_output=False, shell=False, cwd=None, timeout=None, check=False, encoding=None, errors=None, text=None, env=None, universal_newlines=None, **other_pop …
+------------------------------------------------------------------------

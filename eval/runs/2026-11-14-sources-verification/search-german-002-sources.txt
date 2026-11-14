@@ -1,0 +1,23 @@
+------------------------------------------------------------------------
+query        : In welchem RFC ist HTTP/3 spezifiziert, und auf welchem Transportprotokoll baut es auf?
+
+Answer only from Google Search results. Cite the primary source of truth (official documentation, standards body or publisher of record) where the answer can be checked.
+status       : ok
+model        : gemini-3.8-flash
+status (API) : completed
+------------------------------------------------------------------------
+duration     : total 10,959 ms | gemini 10,692 ms | sources/redirects 267 ms
+tokens       : input 276 | output 126 | thought 539 | tool_use 0 | total 941
+grounding    : google_search=1
+steps        : google_search_call -> google_search_result -> thought -> model_output
+search calls : 1
+   - RFC HTTP 3 IETF
+------------------------------------------------------------------------
+citations    : 4 annotations, 2 distinct URLs (2 redirects)
+sources      : 2 after resolve/merge/check (max_sources=10)
+   1. www.rfc-editor.org               evidence=3  https://www.rfc-editor.org/rfc/rfc9114
+   2. en.wikipedia.org                 evidence=1  https://en.wikipedia.org/wiki/HTTP/3
+------------------------------------------------------------------------
+answer       : 297 chars / 300 bytes
+  HTTP/3 ist im **RFC 9114** spezifiziert.   Es baut auf dem Transportprotokoll **QUIC** auf (das seinerseits auf UDP aufsetzt).  **Primäre Quelle / Standardisierungsdokument:** * **RFC Editor / Internet Engineering Task Force (IETF):** [RFC 9114 – *HTTP/3*](https://www.rfc-editor.org/info/rfc9114)
+------------------------------------------------------------------------

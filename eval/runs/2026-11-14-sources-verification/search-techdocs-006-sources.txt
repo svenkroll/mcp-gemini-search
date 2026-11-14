@@ -1,0 +1,22 @@
+------------------------------------------------------------------------
+query        : According to MDN Web Docs, which response header may a server include with a 429 Too Many Requests response to tell the client how long to wait?
+
+Answer only from Google Search results. Cite the primary source of truth (official documentation, standards body or publisher of record) where the answer can be checked.
+status       : ok
+model        : gemini-3.8-flash
+status (API) : completed
+------------------------------------------------------------------------
+duration     : total 9,840 ms | gemini 9,548 ms | sources/redirects 293 ms
+tokens       : input 201 | output 147 | thought 290 | tool_use 0 | total 638
+grounding    : google_search=1
+steps        : google_search_call -> google_search_result -> thought -> model_output
+search calls : 1
+   - MDN Web Docs 429 Too Many Requests response header wait
+------------------------------------------------------------------------
+citations    : 2 annotations, 1 distinct URLs (1 redirects)
+sources      : 1 after resolve/merge/check (max_sources=10)
+   1. developer.mozilla.org            evidence=2  https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Status/429
+------------------------------------------------------------------------
+answer       : 448 chars / 448 bytes
+  According to MDN Web Docs, a server may include the **`Retry-After`** response header with a `429 Too Many Requests` response to indicate how long the client should wait before making the request again.  **Primary source of truth:** * **MDN Web Docs:** [*429 Too Many Requests*](https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/429) (referencing standards defined in [RFC 6585, Section 4](https://www.rfc-editor.org/rfc/rfc6585#section-4)).
+------------------------------------------------------------------------

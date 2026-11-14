@@ -1,0 +1,14 @@
+id: search-german-003-sources
+tool: search
+category: german
+input:
+  query: |-
+    Welchen Port verwendet DNS over TLS standardmäßig, und in welchem RFC ist das festgelegt?
+
+    Answer only from Google Search results. Cite the primary source of truth (official documentation, standards body or publisher of record) where the answer can be checked.
+expected: DNS over TLS verwendet standardmäßig Port 853, festgelegt in RFC 7858.
+allowed_sources:
+- rfc-editor.org
+- ietf.org
+ground_truth_date: 2026-11-12
+expected_outcome: answer_with_sources

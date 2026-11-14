@@ -1,0 +1,15 @@
+id: search-stable-003-sources
+tool: search
+category: stable_fact
+input:
+  query: |-
+    When were euro banknotes and coins introduced?
+
+    Answer only from Google Search results. Cite the primary source of truth (official documentation, standards body or publisher of record) where the answer can be checked.
+expected: Euro banknotes and coins were introduced on 1 January 2002.
+allowed_sources:
+- ecb.europa.eu
+- eur-lex.europa.eu
+- european-union.europa.eu
+ground_truth_date: 2026-11-12
+expected_outcome: answer_with_sources

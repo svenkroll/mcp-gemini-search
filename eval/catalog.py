@@ -1,12 +1,12 @@
-"""Ground-truth catalog format and validator (ADR 0005, issue #3).
+"""Ground-truth catalog format and validator (ADR 0005, issues #3 and #36).
 
 This module defines the case format of ``eval/cases/`` and validates it.
 It is deliberately not part of a package: the eval script from #10 imports
 or executes it directly, and it never imports ``gemini_search_mcp``. Each
 case is one YAML file whose name equals the case ``id`` plus ``.yaml``;
 the per-case format is enforced by the Pydantic models below, the rules
-that span several cases (unique ids, file naming, minimum distribution)
-by :func:`validate_catalog`.
+that span several cases (unique ids, file naming, minimum distribution,
+pairing of base cases and their variants) by :func:`validate_catalog`.
 
 Invoke as ``uv run python eval/catalog.py [--strict]``: exit code 0 when
 there are no errors (warnings allowed), otherwise non-zero. Every finding
@@ -60,9 +60,91 @@ MINIMUM_DISTRIBUTION: dict[str, int] = {
 """Minimum number of cases per category from ADR 0005 (41 cases in total);
 only checked in strict mode."""
 
-EXPECTED_OUTCOME_PATTERN = "^(?:answer|honest_unknown|error:(?:" + "|".join(ERROR_CODES) + "))$"
-"""Full-match pattern for ``expected_outcome``: ``answer``, ``honest_unknown``
-or ``error:<code>`` with a code from ADR 0007."""
+ANSWER_WITH_SOURCES = "answer_with_sources"
+"""``expected_outcome`` of a ``search`` case whose question asks for sources
+(ADR 0005); never allowed for ``analyze_url``."""
+
+ANALYZE_URL_EXPECTED_OUTCOME_PATTERN = (
+    "^(?:answer|honest_unknown|error:(?:" + "|".join(ERROR_CODES) + "))$"
+)
+"""Full-match pattern for ``expected_outcome`` of an ``analyze_url`` case:
+``answer``, ``honest_unknown`` or ``error:<code>`` with a code from ADR 0007."""
+
+EXPECTED_OUTCOME_PATTERN = (
+    "^(?:answer|"
+    + ANSWER_WITH_SOURCES
+    + "|honest_unknown|error:(?:"
+    + "|".join(ERROR_CODES)
+    + "))$"
+)
+"""Full-match pattern for ``expected_outcome`` of a ``search`` case:
+``answer``, ``answer_with_sources``, ``honest_unknown`` or ``error:<code>``
+with a code from ADR 0007."""
+
+SOURCES_SUFFIX = (
+    "Answer only from Google Search results. Cite the primary source of truth "
+    "(official documentation, standards body or publisher of record) where the "
+    "answer can be checked."
+)
+"""Text a ``-sources`` variant appends to the query of its base case (ADR 0005)."""
+
+FACT_SUFFIX = (
+    "Answer only with a fact a source confirms; if none does, say it is not publicly known."
+)
+"""Text a ``-fact`` variant appends to the query of its base case (ADR 0005)."""
+
+VARIANT_SEPARATOR = "\n\n"
+"""What stands between the base query and the suffix in a variant's query:
+one blank line."""
+
+
+@dataclass(frozen=True, slots=True)
+class VariantKind:
+    """One kind of variant case of a ``search`` base case (ADR 0005).
+
+    Attributes:
+        id_suffix: what the variant's id appends to the id of its base case.
+            In strict mode an id ending with it always denotes a variant.
+        base_outcome: ``expected_outcome`` of the base case. Every ``search``
+            case with this outcome that is not a variant itself needs exactly
+            one variant of this kind.
+        outcome: ``expected_outcome`` of the variant.
+        query_suffix: text appended to the base query after
+            :data:`VARIANT_SEPARATOR`.
+        suffix_name: name of the constant holding ``query_suffix``, used in
+            rule texts.
+        same_expected: whether the variant must repeat the base's ``expected``.
+    """
+
+    id_suffix: str
+    base_outcome: str
+    outcome: str
+    query_suffix: str
+    suffix_name: str
+    same_expected: bool
+
+
+VARIANT_KINDS: tuple[VariantKind, ...] = (
+    VariantKind(
+        id_suffix="-sources",
+        base_outcome="answer",
+        outcome=ANSWER_WITH_SOURCES,
+        query_suffix=SOURCES_SUFFIX,
+        suffix_name="SOURCES_SUFFIX",
+        same_expected=True,
+    ),
+    VariantKind(
+        id_suffix="-fact",
+        base_outcome="honest_unknown",
+        outcome="honest_unknown",
+        query_suffix=FACT_SUFFIX,
+        suffix_name="FACT_SUFFIX",
+        same_expected=False,
+    ),
+)
+"""Both variant kinds of ADR 0005: ``<id>-sources`` for a ``search`` ``answer``
+case and ``<id>-fact`` for a ``search`` ``honest_unknown`` case. The pairing
+rules are only checked in strict mode."""
 
 Category = Literal[
     "stable_fact",
@@ -124,8 +206,9 @@ class _CaseFields(BaseModel):
     - ``ground_truth_date``: ISO date (``YYYY-MM-DD``) of the core
       statement's reference date.
     - ``expected_outcome``: ``answer``, ``honest_unknown`` or
-      ``error:<code>`` with a code from ADR 0007
-      (:data:`EXPECTED_OUTCOME_PATTERN`).
+      ``error:<code>`` with a code from ADR 0007, for ``search`` also
+      ``answer_with_sources`` (:data:`EXPECTED_OUTCOME_PATTERN`,
+      :data:`ANALYZE_URL_EXPECTED_OUTCOME_PATTERN`).
     - ``draft``: optional flag for example cases; ``true`` is an error in
       strict mode (checked by :func:`validate_catalog`, not by the model).
     """
@@ -157,10 +240,13 @@ class AnalyzeUrlCase(_CaseFields):
 
     ``tool`` is the union discriminator and must be given in the file;
     ``input`` must be an :class:`AnalyzeUrlInput` mapping.
+    ``expected_outcome`` must not be ``answer_with_sources``, which exists
+    only for ``search``.
     """
 
     tool: Literal["analyze_url"]
     input: AnalyzeUrlInput
+    expected_outcome: str = Field(pattern=ANALYZE_URL_EXPECTED_OUTCOME_PATTERN)
 
 
 Case = Annotated[SearchCase | AnalyzeUrlCase, Field(discriminator="tool")]
@@ -187,6 +273,13 @@ _INPUT_RULES: dict[str, str] = {
 }
 """Rule text for an ``input`` that does not match the case's ``tool``."""
 
+_EXPECTED_OUTCOME_RULE = (
+    "must be answer, answer_with_sources (tool search only), honest_unknown or "
+    "error:<code> with a code from ADR 0007"
+)
+"""Rule text for an ``expected_outcome`` that is unknown or not allowed for
+the case's ``tool``."""
+
 
 def _rule_for(field: str, tool: str | None) -> str:
     """Return the rule text for a model violation of ``field`` (issue #3)."""
@@ -205,7 +298,7 @@ def _rule_for(field: str, tool: str | None) -> str:
     if field == "ground_truth_date":
         return "must be an ISO date"
     if field == "expected_outcome":
-        return "must be answer, honest_unknown or error:<code> with a code from ADR 0007"
+        return _EXPECTED_OUTCOME_RULE
     if field == "draft":
         return "must be true or false"
     return "must be an ADR 0005 field"
@@ -272,6 +365,79 @@ def _deduplicate(findings: Sequence[Finding]) -> list[Finding]:
             seen.add(finding)
             unique.append(finding)
     return unique
+
+
+def _variant_kind(case_id: str) -> VariantKind | None:
+    """Return the variant kind whose id suffix ``case_id`` ends with, if any."""
+    for kind in VARIANT_KINDS:
+        if case_id.endswith(kind.id_suffix):
+            return kind
+    return None
+
+
+def _variant_findings(cases: Sequence[tuple[str, Case]]) -> list[Finding]:
+    """Check the pairing of base cases and variants (strict mode, ADR 0005).
+
+    ``cases`` holds every valid case with its file name, ordered by file
+    name. Returns the findings described in :func:`validate_catalog`, in
+    that order.
+    """
+    by_id: dict[str, Case] = {}
+    for _, case in cases:
+        by_id.setdefault(case.id, case)
+    findings: list[Finding] = []
+
+    def error(name: str, field: str, rule: str) -> None:
+        findings.append(Finding("error", name, field, rule))
+
+    for name, case in cases:
+        kind = _variant_kind(case.id)
+        if kind is None:
+            if isinstance(case, SearchCase):
+                for wanted in VARIANT_KINDS:
+                    variant_id = case.id + wanted.id_suffix
+                    if case.expected_outcome == wanted.base_outcome and variant_id not in by_id:
+                        error(
+                            name,
+                            "id",
+                            f"a search {wanted.base_outcome} case requires the variant case "
+                            f"{variant_id}",
+                        )
+            continue
+        suffix = kind.id_suffix
+        if not isinstance(case, SearchCase):
+            error(name, "tool", f"must be search for a {suffix} variant")
+            continue
+        if case.expected_outcome != kind.outcome:
+            error(name, "expected_outcome", f"must be {kind.outcome} for a {suffix} variant")
+        base_id = case.id[: -len(suffix)]
+        base = by_id.get(base_id)
+        if base is None:
+            error(name, "id", f"a {suffix} variant requires the base case {base_id}")
+            continue
+        if _variant_kind(base_id) is not None:
+            error(name, "id", f"the base case {base_id} must not be a variant itself")
+            continue
+        if not isinstance(base, SearchCase) or base.expected_outcome != kind.base_outcome:
+            error(
+                name,
+                "id",
+                f"the base case {base_id} of a {suffix} variant must be a search case "
+                f"with expected_outcome {kind.base_outcome}",
+            )
+            continue
+        if case.category != base.category:
+            error(name, "category", f"must equal the category of the base case {base_id}")
+        if kind.same_expected and case.expected != base.expected:
+            error(name, "expected", f"must equal the expected of the base case {base_id}")
+        if case.input.query != base.input.query + VARIANT_SEPARATOR + kind.query_suffix:
+            error(
+                name,
+                "input.query",
+                f"must be the query of the base case {base_id}, a blank line and "
+                f"{kind.suffix_name}",
+            )
+    return findings
 
 
 @dataclass(frozen=True, slots=True)
@@ -363,9 +529,10 @@ def validate_catalog(
           tool search`` / ``must contain exactly url and question for tool
           analyze_url``; ``must be an ADR 0005 field``; ``must be a
           non-empty list of domains``; ``must be an ISO date``; ``must be
-          answer, honest_unknown or error:<code> with a code from ADR
-          0007``. An ``input`` that does not match ``tool`` is always one
-          of these errors.
+          answer, answer_with_sources (tool search only), honest_unknown or
+          error:<code> with a code from ADR 0007``. An ``input`` that does
+          not match ``tool`` is always one of these errors, and so is
+          ``answer_with_sources`` on an ``analyze_url`` case.
         - An ``id`` already used by an earlier file (sorted by name):
           field ``id``, rule ``must be unique; also used in <first file>``.
         - A file name stem that differs from ``id``: field ``id``, rule
@@ -384,6 +551,49 @@ def validate_catalog(
           a category (drafts count): file ``catalog``, field ``category``,
           rule ``<category>: at least <n> case(s) required, found <m>``, one
           finding per category below the minimum.
+        - The variant pairing rules of :data:`VARIANT_KINDS`, checked over
+          the valid cases; ``<suffix>`` is ``-sources`` or ``-fact``. A case
+          whose id ends with ``<suffix>`` is a variant, its base id is the
+          id without it. These findings follow the per-file findings,
+          ordered by file name, and precede the distribution findings:
+
+          - a ``search`` ``answer`` case that is not a variant has no
+            ``<id>-sources`` case, or a ``search`` ``honest_unknown`` case
+            that is not a variant has no ``<id>-fact`` case: field ``id``,
+            rule ``a search <outcome> case requires the variant case
+            <id><suffix>`` (ids are unique, so there is never more than
+            one);
+          - a variant that is not a ``search`` case: field ``tool``, rule
+            ``must be search for a <suffix> variant``; nothing else is
+            checked for it;
+          - a variant whose ``expected_outcome`` is not
+            ``answer_with_sources`` (``-sources``) or ``honest_unknown``
+            (``-fact``): field ``expected_outcome``, rule ``must be
+            <outcome> for a <suffix> variant``;
+          - a variant without its base case: field ``id``, rule ``a
+            <suffix> variant requires the base case <base id>``;
+          - a variant of a variant (``...-sources-sources``,
+            ``...-fact-sources``): field ``id``, rule ``the base case
+            <base id> must not be a variant itself``;
+          - a variant whose base is not a ``search`` case with
+            ``expected_outcome`` ``answer`` (``-sources``) or
+            ``honest_unknown`` (``-fact``), for example ``-fact`` on an
+            ``answer`` case: field ``id``, rule ``the base case <base id>
+            of a <suffix> variant must be a search case with
+            expected_outcome <outcome>``;
+          - a variant whose ``category`` differs from its base: field
+            ``category``, rule ``must equal the category of the base case
+            <base id>``;
+          - a ``-sources`` variant whose ``expected`` differs from its
+            base: field ``expected``, rule ``must equal the expected of the
+            base case <base id>``;
+          - a variant whose query is not exactly the base query,
+            :data:`VARIANT_SEPARATOR` and the suffix: field
+            ``input.query``, rule ``must be the query of the base case
+            <base id>, a blank line and SOURCES_SUFFIX`` (or
+            ``FACT_SUFFIX``).
+
+          The last three are only checked against a base of the right kind.
 
     Args:
         cases_dir: catalog directory to validate; defaults to the
@@ -396,7 +606,7 @@ def validate_catalog(
     """
     reference = today if today is not None else date.today()
     findings: list[Finding] = []
-    valid_cases: list[Case] = []
+    valid_cases: list[tuple[str, Case]] = []
     seen_ids: dict[str, str] = {}
     entries = (
         sorted(cases_dir.iterdir(), key=lambda entry: entry.name) if cases_dir.is_dir() else []
@@ -427,7 +637,7 @@ def validate_catalog(
             if case_id != stem:
                 errors.append(Finding("error", name, "id", f"must equal the file name {stem}"))
         if case is not None:
-            valid_cases.append(case)
+            valid_cases.append((name, case))
             if (
                 case.category == "current_fact"
                 and (reference - case.ground_truth_date).days > STALE_DAYS
@@ -452,7 +662,8 @@ def validate_catalog(
         findings.extend(errors)
         findings.extend(warnings)
     if strict:
-        counts = Counter(case.category for case in valid_cases)
+        findings.extend(_variant_findings(valid_cases))
+        counts = Counter(case.category for _, case in valid_cases)
         for category, minimum in MINIMUM_DISTRIBUTION.items():
             found = counts.get(category, 0)
             if found < minimum:
@@ -527,7 +738,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument(
         "--strict",
         action="store_true",
-        help="also reject drafts and enforce the minimum distribution per category",
+        help=(
+            "also reject drafts and enforce the minimum distribution per category "
+            "and the pairing of base cases and their variants"
+        ),
     )
     args = parser.parse_args(argv)
     findings = validate_catalog(strict=args.strict)

@@ -1,0 +1,27 @@
+------------------------------------------------------------------------
+query        : What is the latest version of the Unicode Standard?
+
+Answer only from Google Search results. Cite the primary source of truth (official documentation, standards body or publisher of record) where the answer can be checked.
+status       : ok
+model        : gemini-3.8-flash
+status (API) : completed
+------------------------------------------------------------------------
+duration     : total 10,101 ms | gemini 9,793 ms | sources/redirects 308 ms
+tokens       : input 162 | output 235 | thought 311 | tool_use 0 | total 708
+grounding    : google_search=2
+steps        : google_search_call -> google_search_result -> thought -> model_output
+search calls : 2
+   - latest version of the Unicode Standard site unicode org
+   - Unicode standard current latest version
+------------------------------------------------------------------------
+citations    : 7 annotations, 5 distinct URLs (5 redirects)
+sources      : 5 after resolve/merge/check (max_sources=10)
+   1. www.unicode.org                  evidence=1  https://www.unicode.org/releases/
+   2. blog.unicode.org                 evidence=2  http://blog.unicode.org/2026/09/announcing-unicode-standard-version-180.html
+   3. www.unicode.org                  evidence=2  https://www.unicode.org/versions/Unicode18.0.0/
+   4. www.unicode.org                  evidence=1  https://www.unicode.org/Public/18.0.0/charts/PDF/U10FB0.pdf
+   5. www.unicode.org                  evidence=1  https://www.unicode.org/versions/enumeratedversions.html
+------------------------------------------------------------------------
+answer       : 634 chars / 634 bytes
+  The latest version of the Unicode Standard is **Unicode 18.0.0** (released on September 16, 2026).   ### Primary Source of Truth * **Standards Body / Publisher of Record:** The Unicode Consortium * **Documentation & Verification URLs:**   * Latest version permalink: [https://www.unicode.org/versions/latest/](https://www.unicode.org/versions/latest/)   * Version 18.0.0 specification: [https://www.unicode.org/versions/Unicode18.0.0/](https://www.unicode.org/versions/Unicode18.0.0/)   * Enumerated versions archive: [https://www.unicode.org/versions/enumeratedversions.html](https://www.unicode.org/versions/enumeratedversions.html)
+------------------------------------------------------------------------

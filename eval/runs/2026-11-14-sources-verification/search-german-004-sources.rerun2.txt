@@ -1,0 +1,28 @@
+------------------------------------------------------------------------
+query        : Seit wann müssen inländische Unternehmen in Deutschland E-Rechnungen empfangen können, und welcher europäischen Norm muss eine E-Rechnung entsprechen?
+
+Answer only from Google Search results. Cite the primary source of truth (official documentation, standards body or publisher of record) where the answer can be checked.
+status       : ok
+model        : gemini-3.8-flash
+status (API) : completed
+------------------------------------------------------------------------
+duration     : total 13,967 ms | gemini 13,428 ms | sources/redirects 539 ms
+tokens       : input 334 | output 387 | thought 818 | tool_use 0 | total 1539
+grounding    : google_search=2
+steps        : google_search_call -> google_search_result -> thought -> model_output
+search calls : 2
+   - E Rechnung Bundesministerium der Finanzen EN 16931 Empfangspflicht 1 Januar 2025
+   - E Rechnung Pflicht Empfang inlaendische Unternehmen Deutschland Datum Norm
+------------------------------------------------------------------------
+citations    : 11 annotations, 6 distinct URLs (6 redirects)
+sources      : 6 after resolve/merge/check (max_sources=10)
+   1. e-rechnung-bund.de               evidence=4  https://e-rechnung-bund.de/e-rechnung/e-rechnung-zwischen-unternehmen-b2b
+   2. eindok.de                        evidence=1  https://eindok.de/ratgeber/e-rechnung-pflicht
+   3. www.wko.at                       evidence=2  https://www.wko.at/steuern/e-rechnung-deutschland
+   4. www.ihk.de                       evidence=2  https://www.ihk.de/dresden/hauptnavigation/recht-steuern/erechnung-6232764
+   5. www.cleartax.com                 evidence=1  https://www.cleartax.com/de/e-rechnung
+   6. www.oehler-steuerberater.de      evidence=1  https://www.oehler-steuerberater.de/fileadmin/oehler/downloads/Oehler-Partner-Themeninfo-Pflicht-zur-E-Rechnung-2025.pdf
+------------------------------------------------------------------------
+answer       : 1097 chars / 1115 bytes
+  * **Stichtag für die Empfangspflicht:**     Inländische Unternehmen in Deutschland müssen seit dem **1. Januar 2025** grundsätzlich in der Lage sein, E-Rechnungen zu empfangen und zu verarbeiten.  * **Europäische Norm:**     Das strukturierte elektronische Format einer E-Rechnung muss der europäischen Norm **EN 16931** entsprechen (bzw. mit dieser interoperabel sein). Typische in Deutschland darauf basierende Formate sind *XRechnung* und *ZUGFeRD*.  ---  ### Primärquellen zur Überprüfung: * **Gesetzliche Grundlage:** § 14 Umsatzsteuergesetz (UStG) in der durch das **Wachstumschancengesetz** geänderten Fassung (*Bundesgesetzblatt BGBl. I 2024 Nr. 108*). * **Zuständige Bundesbehörde:** Schreib …
+------------------------------------------------------------------------

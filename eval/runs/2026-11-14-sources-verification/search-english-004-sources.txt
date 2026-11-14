@@ -1,0 +1,23 @@
+------------------------------------------------------------------------
+query        : What does EPSS stand for, and which organization maintains it?
+
+Answer only from Google Search results. Cite the primary source of truth (official documentation, standards body or publisher of record) where the answer can be checked.
+status       : ok
+model        : gemini-3.8-flash
+status (API) : completed
+------------------------------------------------------------------------
+duration     : total 6,817 ms | gemini 6,545 ms | sources/redirects 272 ms
+tokens       : input 156 | output 113 | thought 110 | tool_use 0 | total 379
+grounding    : google_search=1
+steps        : google_search_call -> google_search_result -> thought -> model_output
+search calls : 1
+   - EPSS Exploit Prediction Scoring System official organization
+------------------------------------------------------------------------
+citations    : 4 annotations, 2 distinct URLs (2 redirects)
+sources      : 2 after resolve/merge/check (max_sources=10)
+   1. www.first.org                    evidence=3  https://www.first.org/epss/
+   2. casrai.org                       evidence=1  https://casrai.org/guides/epss
+------------------------------------------------------------------------
+answer       : 367 chars / 369 bytes
+  **EPSS** stands for the **Exploit Prediction Scoring System**.   It is maintained and governed by the **EPSS Special Interest Group (SIG)** at the **Forum of Incident Response and Security Teams (FIRST)**.  **Primary source of truth:** * **Official documentation / Publisher of record:** [FIRST – Exploit Prediction Scoring System (EPSS)](https://www.first.org/epss/)
+------------------------------------------------------------------------

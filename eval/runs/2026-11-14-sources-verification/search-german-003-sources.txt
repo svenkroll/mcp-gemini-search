@@ -1,0 +1,26 @@
+------------------------------------------------------------------------
+query        : Welchen Port verwendet DNS over TLS standardmäßig, und in welchem RFC ist das festgelegt?
+
+Answer only from Google Search results. Cite the primary source of truth (official documentation, standards body or publisher of record) where the answer can be checked.
+status       : ok
+model        : gemini-3.8-flash
+status (API) : completed
+------------------------------------------------------------------------
+duration     : total 9,249 ms | gemini 8,936 ms | sources/redirects 313 ms
+tokens       : input 265 | output 182 | thought 310 | tool_use 0 | total 757
+grounding    : google_search=2
+steps        : google_search_call -> google_search_result -> thought -> model_output
+search calls : 2
+   - RFC 7858 DNS over TLS port
+   - DNS over TLS standard port RFC
+------------------------------------------------------------------------
+citations    : 5 annotations, 4 distinct URLs (4 redirects)
+sources      : 4 after resolve/merge/check (max_sources=10)
+   1. dnscale.eu                       evidence=1  https://dnscale.eu/learning/dns-over-tls-dot
+   2. tex2e.github.io                  evidence=2  https://tex2e.github.io/rfc-translater/html/rfc7858.html
+   3. www.infoblox.com                 evidence=1  https://www.infoblox.com/glossary/dns-over-tls-dot
+   4. www.rfc-editor.org               evidence=1  https://www.rfc-editor.org/info/rfc7858/
+------------------------------------------------------------------------
+answer       : 430 chars / 438 bytes
+  **DNS over TLS (DoT)** verwendet standardmäßig den **TCP-Port 853**.  Festgelegt ist dies durch die Internet Engineering Task Force (IETF) in der Spezifikation: * **RFC 7858** (*„Specification for DNS over Transport Layer Security (TLS)“*, Abschnitt 3.1).  **Primärquelle:** * IETF / RFC Editor: [RFC 7858](https://www.rfc-editor.org/info/rfc7858) (bzw. über den [IETF Datatracker](https://datatracker.ietf.org/doc/html/rfc7858)).
+------------------------------------------------------------------------

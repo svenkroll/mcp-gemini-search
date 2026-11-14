@@ -1,0 +1,17 @@
+id: search-german-004-sources
+tool: search
+category: german
+input:
+  query: |-
+    Seit wann müssen inländische Unternehmen in Deutschland E-Rechnungen empfangen können, und welcher europäischen Norm muss eine E-Rechnung entsprechen?
+
+    Answer only from Google Search results. Cite the primary source of truth (official documentation, standards body or publisher of record) where the answer can be checked.
+expected: Seit dem 1. Januar 2025 müssen inländische Unternehmen E-Rechnungen empfangen können; eine E-Rechnung muss der europäischen Norm EN 16931 entsprechen.
+allowed_sources:
+- bundesfinanzministerium.de
+- gesetze-im-internet.de
+- xeinkauf.de
+- e-rechnung-bund.de
+- ec.europa.eu
+ground_truth_date: 2026-11-12
+expected_outcome: answer_with_sources

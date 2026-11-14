@@ -1,0 +1,13 @@
+id: search-english-003-sources
+tool: search
+category: english
+input:
+  query: |-
+    When did CISA publish its Known Exploited Vulnerabilities catalog, and under which directive?
+
+    Answer only from Google Search results. Cite the primary source of truth (official documentation, standards body or publisher of record) where the answer can be checked.
+expected: CISA published the Known Exploited Vulnerabilities catalog on 3 November 2021 under Binding Operational Directive 22-01.
+allowed_sources:
+- cisa.gov
+ground_truth_date: 2026-11-12
+expected_outcome: answer_with_sources

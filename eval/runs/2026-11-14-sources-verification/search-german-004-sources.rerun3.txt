@@ -1,0 +1,35 @@
+------------------------------------------------------------------------
+query        : Seit wann müssen inländische Unternehmen in Deutschland E-Rechnungen empfangen können, und welcher europäischen Norm muss eine E-Rechnung entsprechen?
+
+Answer only from Google Search results. Cite the primary source of truth (official documentation, standards body or publisher of record) where the answer can be checked.
+status       : ok
+model        : gemini-3.8-flash
+status (API) : completed
+------------------------------------------------------------------------
+duration     : total 21,121 ms | gemini 20,309 ms | sources/redirects 812 ms
+tokens       : input 601 | output 652 | thought 879 | tool_use 0 | total 2132
+grounding    : google_search=4
+steps        : google_search_call -> google_search_result -> google_search_call -> google_search_result -> thought -> model_output
+search calls : 4
+   - Wachstumschancengesetz E Rechnung Empfang ab 1 Januar 2025 EN 16931
+   - E Rechnung Empfangspflicht Unternehmen Deutschland Datum Europaeische Norm
+   - "§ 14" "EN 16931" UStG Bundesgesetzblatt Wachstumschancengesetz
+   - BMF Schreiben E-Rechnung 14 UStG EN 16931 Bundesfinanzministerium
+------------------------------------------------------------------------
+citations    : 17 annotations, 11 distinct URLs (11 redirects)
+sources      : 10 after resolve/merge/check (max_sources=10)
+   1. www.frankfurt-main.ihk.de        evidence=3  https://www.frankfurt-main.ihk.de/recht/uebersicht-alle-rechtsthemen/steuerrecht/umsatzsteuer-national/e-rechnungspflicht-ab-2025-6055774
+   2. www.ihk-muenchen.de              evidence=5  https://www.ihk-muenchen.de/ratgeber/steuern/steuerliche-sonderthemen/elektronische-rechnungen/
+   3. omr.com                          evidence=1  https://omr.com/de/reviews/contenthub/e-rechnung-ausnahmen
+   4. www.retarus.com                  evidence=1  https://www.retarus.com/blog/de/wachstumschancengesetz-ebnet-den-weg-fuer-b2b-e-rechnungspflicht/
+   5. www.lexware.de                   evidence=1  https://www.lexware.de/wissen/faktura-warenwirtschaft/en-16931/
+   6. kanzlei-stoelzel.de              evidence=1  https://kanzlei-stoelzel.de/empfangspflicht-e-rechnungen-ab-2025/
+   7. www.ihk.de                       evidence=1  https://www.ihk.de/konstanz/recht-und-steuern/steuer-und-finanzpolitik/aktuelle-steuerinformationen/e-rechnungen-fuer-inlaendische-b2b-umsaetze--5881122
+   8. www.lfst.bayern.de               evidence=1  https://www.lfst.bayern.de/steuerinfos/weitere-themen/e-rechnung
+   9. www.zdh.de                       evidence=1  https://www.zdh.de/fileadmin/Oeffentlich/Steuern_und_Finanzen/Themen/E-Rechnung/20261015_BMF-Schreiben_E-Rechnung_final.pdf
+  10. e-rechnung-bund.de               evidence=1  https://e-rechnung-bund.de/e-rechnung/e-rechnung-zwischen-unternehmen-b2b
+  note: 1 distinct citation URL(s) merged, dropped or cut by max_sources
+------------------------------------------------------------------------
+answer       : 1760 chars / 1796 bytes
+  ### 1. Seit wann gilt die Empfangspflicht? Inländische Unternehmen in Deutschland müssen elektronische Rechnungen seit dem **1. Januar 2025** empfangen können.   Während für die verpflichtende *Ausstellung* von E-Rechnungen im B2B-Bereich gesetzliche Übergangsfristen (bis Ende 2026 bzw. Ende 2027) gelten, besteht für den *Empfang* seit dem 1. Januar 2025 keine Übergangsregelung – alle inländischen Unternehmer müssen ab diesem Stichtag empfangsbereit sein.  ---  ### 2. Welcher europäischen Norm muss eine E-Rechnung entsprechen? Eine E-Rechnung muss der europäischen CEN-Normenreihe **EN 16931** (Norm für die elektronische Rechnungsstellung und die Liste der entsprechenden Syntaxen gemäß der EU …
+------------------------------------------------------------------------

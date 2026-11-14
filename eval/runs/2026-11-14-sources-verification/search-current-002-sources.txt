@@ -1,0 +1,25 @@
+------------------------------------------------------------------------
+query        : What is the current stable release of Debian?
+
+Answer only from Google Search results. Cite the primary source of truth (official documentation, standards body or publisher of record) where the answer can be checked.
+status       : ok
+model        : gemini-3.8-flash
+status (API) : completed
+------------------------------------------------------------------------
+duration     : total 9,103 ms | gemini 8,800 ms | sources/redirects 303 ms
+tokens       : input 251 | output 148 | thought 366 | tool_use 0 | total 765
+grounding    : google_search=2
+steps        : google_search_call -> google_search_result -> thought -> model_output
+search calls : 2
+   - site debian org releases stable
+   - site debian org current stable release
+------------------------------------------------------------------------
+citations    : 4 annotations, 3 distinct URLs (3 redirects)
+sources      : 3 after resolve/merge/check (max_sources=10)
+   1. www.debian.org                   evidence=2  https://www.debian.org/releases/
+   2. www.debian.org                   evidence=1  https://www.debian.org/releases/trixie/
+   3. wiki.debian.org                  evidence=1  https://wiki.debian.org/DebianReleases
+------------------------------------------------------------------------
+answer       : 441 chars / 447 bytes
+  According to official Debian documentation, the current stable release of Debian is **Debian 13**, codenamed **“trixie”** (with the latest point update being version 13.7, released on September 12, 2026).  **Primary source of truth:** * **Publisher / Official Documentation:** Debian Project — *Debian Releases* ([debian.org/releases](https://www.debian.org/releases) / [debian.org/releases/stable](https://www.debian.org/releases/stable/)).
+------------------------------------------------------------------------

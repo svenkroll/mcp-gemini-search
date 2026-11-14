@@ -1,0 +1,27 @@
+------------------------------------------------------------------------
+query        : According to the git-stash documentation, which subcommand applies a stashed state and removes it from the stash list?
+
+Answer only from Google Search results. Cite the primary source of truth (official documentation, standards body or publisher of record) where the answer can be checked.
+status       : ok
+model        : gemini-3.8-flash
+status (API) : completed
+------------------------------------------------------------------------
+duration     : total 13,501 ms | gemini 13,228 ms | sources/redirects 273 ms
+tokens       : input 222 | output 139 | thought 295 | tool_use 0 | total 656
+grounding    : google_search=6
+steps        : google_search_call -> google_search_result -> google_search_call -> google_search_result -> google_search_call -> google_search_result -> thought -> model_output
+search calls : 6
+   - git stash documentation
+   - git stash documentation pop apply
+   - "git-stash" "pop" "removes it from the stash list" site:git-scm.com
+   - "pop [--index]" site:git-scm.com/docs/git-stash
+   - "Remove a single stashed state from the stash list and apply it on top of the current working tree state" site:git-scm.com
+   - site:git-scm.com/docs/git-stash "pop"
+------------------------------------------------------------------------
+citations    : 3 annotations, 1 distinct URLs (1 redirects)
+sources      : 1 after resolve/merge/check (max_sources=10)
+   1. git-scm.com                      evidence=3  https://git-scm.com/docs/git-stash
+------------------------------------------------------------------------
+answer       : 444 chars / 444 bytes
+  According to the official `git-stash` documentation, the subcommand is **`pop`** (i.e., `git stash pop`).   The documentation describes it as: > *"Remove a single stashed state from the stash list and apply it on top of the current working tree state, i.e., do the inverse operation of `git stash push`."*  **Primary Source of Truth:** * Official Git Reference Manual: [git-stash Documentation (git-scm.com)](https://git-scm.com/docs/git-stash)
+------------------------------------------------------------------------

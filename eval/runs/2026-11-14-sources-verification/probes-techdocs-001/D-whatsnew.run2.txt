@@ -1,0 +1,24 @@
+------------------------------------------------------------------------
+query        : According to the "What's New In Python 3.14" document, which PEP adds template string literals (t-strings)?
+
+Answer only from Google Search results. Cite the primary source of truth (official documentation, standards body or publisher of record) where the answer can be checked.
+status       : ok
+model        : gemini-3.8-flash
+status (API) : completed
+------------------------------------------------------------------------
+duration     : total 10,842 ms | gemini 10,564 ms | sources/redirects 277 ms
+tokens       : input 223 | output 142 | thought 372 | tool_use 0 | total 737
+grounding    : google_search=2
+steps        : google_search_call -> google_search_result -> thought -> model_output
+search calls : 2
+   - Whats New In Python 3.14 template string literals PEP
+   - PEP template string literals t-strings Python 3.14
+------------------------------------------------------------------------
+citations    : 3 annotations, 2 distinct URLs (2 redirects)
+sources      : 2 after resolve/merge/check (max_sources=10)
+   1. docs.python.org                  evidence=2  https://docs.python.org/3/whatsnew/3.14.html
+   2. peps.python.org                  evidence=1  https://peps.python.org/pep-0787/
+------------------------------------------------------------------------
+answer       : 374 chars / 376 bytes
+  According to the official **"What's new in Python 3.14"** documentation, template string literals (t-strings) are added by **PEP 750**.  **Primary source of truth:** * Official Python Documentation: [*What's new in Python 3.14*](https://docs.python.org/3.14/whatsnew/3.14.html) / Python Enhancement Proposals: [PEP 750 – Template Strings](https://peps.python.org/pep-0750/).
+------------------------------------------------------------------------

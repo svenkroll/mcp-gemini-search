@@ -133,19 +133,46 @@ def _case_data(category: str, number: int) -> dict[str, Any]:
     }
 
 
+def _variant_data(base: Mapping[str, Any]) -> dict[str, Any] | None:
+    """Return the variant case issue #36 requires for ``base``, if any."""
+    if base["tool"] != "search" or base["expected_outcome"] not in ("answer", "honest_unknown"):
+        return None
+    with_sources = base["expected_outcome"] == "answer"
+    id_suffix = "-sources" if with_sources else "-fact"
+    query_suffix = run_eval.catalog.SOURCES_SUFFIX if with_sources else run_eval.catalog.FACT_SUFFIX
+    return {
+        **base,
+        "id": base["id"] + id_suffix,
+        "input": {"query": base["input"]["query"] + "\n\n" + query_suffix},
+        "expected_outcome": "answer_with_sources" if with_sources else "honest_unknown",
+    }
+
+
 def _write_catalog(
     cases_dir: Path, overrides: Mapping[str, Mapping[str, Any]] | None = None
 ) -> None:
-    """Write a catalog that passes ``--strict`` (minimum distribution, no drafts)."""
+    """Write a catalog that passes ``--strict``.
+
+    Minimum distribution, no drafts, and for every ``search`` ``answer`` and
+    ``honest_unknown`` case its ``-sources`` or ``-fact`` variant (issue #36).
+    ``overrides`` apply to the base cases only.
+    """
     cases_dir.mkdir(parents=True, exist_ok=True)
     minimum = run_eval.catalog.MINIMUM_DISTRIBUTION
     for category, count in minimum.items():
         for number in range(1, count + 1):
-            data = _case_data(category, number)
-            data.update((overrides or {}).get(data["id"], {}))
-            (cases_dir / f"{data['id']}.yaml").write_text(
-                yaml.safe_dump(data, sort_keys=False), encoding="utf-8"
-            )
+            base = _case_data(category, number)
+            variant = _variant_data(base)
+            base.update((overrides or {}).get(base["id"], {}))
+            for data in (base, variant):
+                if data is not None:
+                    (cases_dir / f"{data['id']}.yaml").write_text(
+                        yaml.safe_dump(data, sort_keys=False), encoding="utf-8"
+                    )
+
+
+# 41 base cases plus 26 ``-sources`` and 4 ``-fact`` variants.
+STRICT_CATALOG_SIZE = 71
 
 
 def _cases(cases_dir: Path, ids: Iterable[str]) -> list[Any]:
@@ -154,10 +181,18 @@ def _cases(cases_dir: Path, ids: Iterable[str]) -> list[Any]:
 
 # --- helpers: records, verdicts, run directories ----------------------------
 
+# ``search`` with ``answer_with_sources`` and ``analyze_url`` with ``answer``.
 ANSWER_CHECKS = {
     "correctness": "manual",
     "groundedness": "manual",
     "source_quality": "pass",
+    "honesty": "n/a",
+}
+# ``search`` with ``answer`` (issue #36): only correctness applies.
+SEARCH_ANSWER_CHECKS = {
+    "correctness": "manual",
+    "groundedness": "n/a",
+    "source_quality": "n/a",
     "honesty": "n/a",
 }
 HONEST_CHECKS = {
@@ -179,9 +214,9 @@ def _error_json(code: str) -> dict[str, Any]:
 
 
 def _record(
-    case_id: str = "search-stable-001",
+    case_id: str = "search-stable-001-sources",
     *,
-    expected_outcome: str = "answer",
+    expected_outcome: str = "answer_with_sources",
     checks: Mapping[str, str] | None = None,
     outcome: str = "ok",
     answer: str = "The answer.",
@@ -381,9 +416,10 @@ E2E_IDS = [
     "analyze-url-failure-001",
     "analyze-url-html-001",
     "search-honest-unknown-001",
+    "search-stable-001-sources",
     "search-stable-001",
 ]
-E2E_TOKEN_TOTALS = (181, 36)
+E2E_TOKEN_TOTALS = (221, 44)
 
 
 def _e2e_provider() -> FakeProvider:
@@ -395,6 +431,12 @@ def _e2e_provider() -> FakeProvider:
                 "The figure is not publicly known.",
                 [],
                 usage=Usage(30, 5),
+                model=FAKE_REPORTED_MODEL,
+            ),
+            _search_result(
+                "RFC 1035 was published in November 1987 (RFC Editor).",
+                ["https://www.rfc-editor.org/info/rfc1035"],
+                usage=Usage(40, 8),
                 model=FAKE_REPORTED_MODEL,
             ),
             _search_result(
@@ -458,8 +500,9 @@ E2E_FILLED = {
     ("analyze-url-html-001", "correctness"): "pass",
     ("analyze-url-html-001", "groundedness"): "fail wrong price",
     ("search-honest-unknown-001", "honesty"): "pass",
+    ("search-stable-001-sources", "correctness"): "pass",
+    ("search-stable-001-sources", "groundedness"): "pass",
     ("search-stable-001", "correctness"): "pass matches RFC",
-    ("search-stable-001", "groundedness"): "pass",
 }
 
 
@@ -574,6 +617,7 @@ def test_ac1_returned_sources_of_both_tools() -> None:
 
 def test_ac1_automatic_checks_decide_error_code_and_source_quality() -> None:
     hit = run_eval.automatic_checks(
+        tool="analyze_url",
         expected_outcome="error:url_unreachable",
         outcome="tool_error",
         sources=[],
@@ -581,6 +625,7 @@ def test_ac1_automatic_checks_decide_error_code_and_source_quality() -> None:
         allowed_sources=["example.com"],
     )
     miss = run_eval.automatic_checks(
+        tool="analyze_url",
         expected_outcome="error:url_unreachable",
         outcome="tool_error",
         sources=[],
@@ -588,7 +633,8 @@ def test_ac1_automatic_checks_decide_error_code_and_source_quality() -> None:
         allowed_sources=["example.com"],
     )
     bad_source = run_eval.automatic_checks(
-        expected_outcome="answer",
+        tool="search",
+        expected_outcome="answer_with_sources",
         outcome="ok",
         sources=["https://example.com/x"],
         error_json=None,
@@ -604,36 +650,39 @@ def test_ac1_automatic_checks_decide_error_code_and_source_quality() -> None:
 
 
 @pytest.mark.parametrize(
-    ("expected_outcome", "expected"),
+    ("tool", "expected_outcome", "expected"),
     [
-        ("answer", ("manual", "manual", "automatic", "n/a")),
-        ("honest_unknown", ("n/a", "n/a", "n/a", "manual")),
-        ("error:url_unreachable", ("automatic", "n/a", "n/a", "n/a")),
-        ("error:invalid_input", ("automatic", "n/a", "n/a", "n/a")),
+        ("analyze_url", "answer", ("manual", "manual", "automatic", "n/a")),
+        ("search", "honest_unknown", ("n/a", "n/a", "n/a", "manual")),
+        ("analyze_url", "error:url_unreachable", ("automatic", "n/a", "n/a", "n/a")),
+        ("search", "error:invalid_input", ("automatic", "n/a", "n/a", "n/a")),
     ],
 )
 def test_ac2_applicability_follows_the_table(
-    expected_outcome: str, expected: tuple[str, str, str, str]
+    tool: str, expected_outcome: str, expected: tuple[str, str, str, str]
 ) -> None:
-    result = run_eval.applicability(expected_outcome)
+    # The rows issue #36 changed are covered in test_run_eval_applicability.py.
+    result = run_eval.applicability(tool, expected_outcome)
 
     assert tuple(result[metric] for metric in run_eval.METRICS) == expected
 
 
 def test_ac2_applicability_rejects_an_unknown_expected_outcome() -> None:
     with pytest.raises(ValueError, match=r"."):
-        run_eval.applicability("maybe")
+        run_eval.applicability("search", "maybe")
 
 
 def test_ac2_automatic_checks_leave_manual_metrics_open_and_decide_the_rest() -> None:
     answer = run_eval.automatic_checks(
-        expected_outcome="answer",
+        tool="search",
+        expected_outcome="answer_with_sources",
         outcome="ok",
         sources=["https://rfc-editor.org/a"],
         error_json=None,
         allowed_sources=["rfc-editor.org"],
     )
     honest_with_sources = run_eval.automatic_checks(
+        tool="search",
         expected_outcome="honest_unknown",
         outcome="ok",
         sources=["https://example.com/a"],
@@ -641,6 +690,7 @@ def test_ac2_automatic_checks_leave_manual_metrics_open_and_decide_the_rest() ->
         allowed_sources=["rfc-editor.org"],
     )
     honest_without_sources = run_eval.automatic_checks(
+        tool="search",
         expected_outcome="honest_unknown",
         outcome="ok",
         sources=[],
@@ -660,7 +710,8 @@ def test_ac2_automatic_checks_leave_manual_metrics_open_and_decide_the_rest() ->
 
 def test_ac2_answer_case_with_a_tool_error_fails_correctness_and_groundedness() -> None:
     checks = run_eval.automatic_checks(
-        expected_outcome="answer",
+        tool="search",
+        expected_outcome="answer_with_sources",
         outcome="tool_error",
         sources=[],
         error_json=_error_json("upstream_unavailable"),
@@ -675,7 +726,8 @@ def test_ac2_answer_case_with_a_tool_error_fails_correctness_and_groundedness() 
 
 def test_ac2_answer_case_without_sources_fails_source_quality() -> None:
     checks = run_eval.automatic_checks(
-        expected_outcome="answer",
+        tool="search",
+        expected_outcome="answer_with_sources",
         outcome="ok",
         sources=[],
         error_json=None,
@@ -687,7 +739,8 @@ def test_ac2_answer_case_without_sources_fails_source_quality() -> None:
 
 def test_ac2_answer_case_with_one_allowed_and_one_other_source_passes_source_quality() -> None:
     checks = run_eval.automatic_checks(
-        expected_outcome="answer",
+        tool="search",
+        expected_outcome="answer_with_sources",
         outcome="ok",
         sources=["https://rfc-editor.org/a", "https://example.com/b"],
         error_json=None,
@@ -699,6 +752,7 @@ def test_ac2_answer_case_with_one_allowed_and_one_other_source_passes_source_qua
 
 def test_ac2_error_case_that_succeeds_fails_correctness() -> None:
     checks = run_eval.automatic_checks(
+        tool="analyze_url",
         expected_outcome="error:url_unreachable",
         outcome="ok",
         sources=["https://example.com/a"],
@@ -1302,7 +1356,7 @@ def test_ec1_strict_catalog_returns_every_case(tmp_path: Path) -> None:
 
     cases = run_eval.load_strict_catalog(tmp_path)
 
-    assert len(cases) == sum(run_eval.catalog.MINIMUM_DISTRIBUTION.values())
+    assert len(cases) == STRICT_CATALOG_SIZE
 
 
 def test_ec1_strict_catalog_accepts_warnings(tmp_path: Path) -> None:
@@ -1310,7 +1364,7 @@ def test_ec1_strict_catalog_accepts_warnings(tmp_path: Path) -> None:
 
     cases = run_eval.load_strict_catalog(tmp_path)
 
-    assert len(cases) == sum(run_eval.catalog.MINIMUM_DISTRIBUTION.values())
+    assert len(cases) == STRICT_CATALOG_SIZE
 
 
 def test_ec1_strict_catalog_aborts_with_the_validation_messages_for_a_draft(
@@ -1410,8 +1464,16 @@ def test_ec3_run_aborts_for_an_unknown_case_before_the_server_starts(tmp_path: P
 
 
 def test_ec3_main_run_accepts_repeated_case_options_and_names_unknown_ids(
-    capsys: pytest.CaptureFixture[str],
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
+    # A catalog of its own, so the test does not depend on whether the
+    # repository's catalog currently passes ``--strict`` (drafts, issue #36).
+    _write_catalog(tmp_path)
+    load_strict_catalog = run_eval.load_strict_catalog
+    monkeypatch.setattr(
+        run_eval, "load_strict_catalog", lambda _cases_dir: load_strict_catalog(tmp_path)
+    )
+
     code = run_eval.main(
         ["run", "--case", "no-such-case-one", "--case", "no-such-case-two"], LIVE_ENVIRON
     )
@@ -1622,8 +1684,7 @@ def test_ec5_a_timed_out_call_is_recorded_as_failed_and_the_run_continues(
     failed = records[1]
     assert failed.failure
     assert failed.structured_content is None
-    assert failed.checks["correctness"] == "fail"
-    assert failed.checks["groundedness"] == "fail"
+    assert failed.checks == {**SEARCH_ANSWER_CHECKS, "correctness": "fail"}
     assert failed.latency_ms >= 0
     assert [r.id for r in run_eval.read_records(results_path)] == [r.id for r in records]
 
@@ -1826,8 +1887,12 @@ def test_ac7_run_writes_results_run_data_and_review_for_every_case(e2e: _E2E) ->
     assert honest.checks == HONEST_CHECKS
     assert (honest.input_tokens, honest.output_tokens) == (30, 5)
 
+    with_sources = by_id["search-stable-001-sources"]
+    assert with_sources.expected_outcome == "answer_with_sources"
+    assert with_sources.checks == ANSWER_CHECKS
+
     stable = by_id["search-stable-001"]
-    assert stable.checks == ANSWER_CHECKS
+    assert stable.checks == SEARCH_ANSWER_CHECKS
     assert [source["url"] for source in stable.structured_content["sources"]] == [
         "https://www.rfc-editor.org/rfc/rfc1035"
     ]
@@ -1856,7 +1921,7 @@ def test_ac7_review_lists_the_run_data_the_cases_and_open_verdicts(e2e: _E2E) ->
     assert FAKE_REPORTED_MODEL in review
     for case_id in E2E_IDS:
         assert f"## Case {case_id}" in lines
-    assert lines.count("- verdict correctness:") == 2
+    assert lines.count("- verdict correctness:") == 3
     assert lines.count("- verdict groundedness:") == 2
     assert lines.count("- verdict honesty:") == 1
     data = run_eval.RunData.from_json_dict(
@@ -1892,13 +1957,13 @@ def test_ac7_run_and_score_pass_end_to_end(e2e: _E2E) -> None:
     report = run_eval.score_command(run_dir)
 
     rates = {rate.metric: rate for rate in report.rates}
-    assert (rates["correctness"].passed, rates["correctness"].total) == (3, 3)
+    assert (rates["correctness"].passed, rates["correctness"].total) == (4, 4)
     assert (rates["groundedness"].passed, rates["groundedness"].total) == (1, 2)
     assert (rates["source_quality"].passed, rates["source_quality"].total) == (2, 2)
     assert (rates["honesty"].passed, rates["honesty"].total) == (1, 1)
     assert report.go is False
     assert (report.input_tokens_total, report.output_tokens_total) == E2E_TOKEN_TOTALS
-    assert report.case_count == 4
+    assert report.case_count == 5
     text = (run_dir / run_eval.REPORT_FILE).read_text(encoding="utf-8")
     assert "NO-GO" in text
     assert FAKE_REPORTED_MODEL in text

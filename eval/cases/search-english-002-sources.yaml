@@ -1,0 +1,14 @@
+id: search-english-002-sources
+tool: search
+category: english
+input:
+  query: |-
+    Which RFC currently specifies the HTTP/1.1 message syntax, and when was it published?
+
+    Answer only from Google Search results. Cite the primary source of truth (official documentation, standards body or publisher of record) where the answer can be checked.
+expected: RFC 9112, published in June 2022, currently specifies the HTTP/1.1 message syntax.
+allowed_sources:
+- rfc-editor.org
+- ietf.org
+ground_truth_date: 2026-11-12
+expected_outcome: answer_with_sources
