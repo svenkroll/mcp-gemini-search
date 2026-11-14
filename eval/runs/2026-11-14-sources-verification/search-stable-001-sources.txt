@@ -1,0 +1,24 @@
+------------------------------------------------------------------------
+query        : In which year was RFC 1035 published?
+
+Answer only from Google Search results. Cite the primary source of truth (official documentation, standards body or publisher of record) where the answer can be checked.
+status       : ok
+model        : gemini-3.8-flash
+status (API) : completed
+------------------------------------------------------------------------
+duration     : total 7,745 ms | gemini 7,453 ms | sources/redirects 292 ms
+tokens       : input 165 | output 129 | thought 181 | tool_use 0 | total 475
+grounding    : google_search=2
+steps        : google_search_call -> google_search_result -> thought -> model_output
+search calls : 2
+   - RFC 1035 publication date year IETF
+   - RFC 1035 rfc editor
+------------------------------------------------------------------------
+citations    : 3 annotations, 2 distinct URLs (2 redirects)
+sources      : 2 after resolve/merge/check (max_sources=10)
+   1. www.rfc-editor.org               evidence=2  https://www.rfc-editor.org/info/rfc1035/
+   2. datatracker.ietf.org             evidence=1  https://datatracker.ietf.org/doc/rfc1035/history/
+------------------------------------------------------------------------
+answer       : 322 chars / 322 bytes
+  RFC 1035 was published in **1987** (specifically, November 1987).  **Primary source of truth:** * **RFC Editor / Internet Engineering Task Force (IETF):** [RFC 1035 (*Domain names - implementation and specification*)](https://www.rfc-editor.org/info/rfc1035) / [IETF Datatracker](https://datatracker.ietf.org/doc/rfc1035/)
+------------------------------------------------------------------------

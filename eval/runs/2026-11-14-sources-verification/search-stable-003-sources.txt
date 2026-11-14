@@ -1,0 +1,25 @@
+------------------------------------------------------------------------
+query        : When were euro banknotes and coins introduced?
+
+Answer only from Google Search results. Cite the primary source of truth (official documentation, standards body or publisher of record) where the answer can be checked.
+status       : ok
+model        : gemini-3.8-flash
+status (API) : completed
+------------------------------------------------------------------------
+duration     : total 11,281 ms | gemini 10,993 ms | sources/redirects 288 ms
+tokens       : input 196 | output 271 | thought 417 | tool_use 0 | total 884
+grounding    : google_search=2
+steps        : google_search_call -> google_search_result -> thought -> model_output
+search calls : 2
+   - introduction euro banknotes and coins date site europa eu
+   - euro banknotes and coins introduction date site ecb europa eu
+------------------------------------------------------------------------
+citations    : 6 annotations, 3 distinct URLs (3 redirects)
+sources      : 3 after resolve/merge/check (max_sources=10)
+   1. www.ecb.europa.eu                evidence=3  https://www.ecb.europa.eu/euro/changeover/2002/html/index.en.html
+   2. www.ecb.europa.eu                evidence=1  https://www.ecb.europa.eu/pub/pdf/other/euro_became_our_moneyen.pdf
+   3. eur-lex.europa.eu                evidence=2  https://eur-lex.europa.eu/EN/legal-content/summary/five-years-of-euro-banknotes-and-coins.html
+------------------------------------------------------------------------
+answer       : 766 chars / 770 bytes
+  Euro banknotes and coins were introduced into circulation on **1 January 2002** across 12 European Union member countries.   ### Primary Source of Truth * **European Central Bank (ECB)**:    * Document: *Initial changeover (2002)* and *How the Euro Became Our Money: A Short History of the Euro Banknotes and Coins*.   * URL: [European Central Bank – Initial changeover (2002)](https://www.ecb.europa.eu/euro/changeover/2002/html/index.en.html) * **EUR-Lex / European Commission** (Publisher of record for EU law and documentation):   * Document: *Five years of euro banknotes and coins* [COM(2006) 862 final].   * URL: [EUR-Lex – Five years of Euro banknotes and coins](https://eur-lex.europa.eu/EN/ …
+------------------------------------------------------------------------

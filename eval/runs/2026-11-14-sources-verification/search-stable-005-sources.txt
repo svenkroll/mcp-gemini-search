@@ -1,0 +1,29 @@
+------------------------------------------------------------------------
+query        : Who proposed the World Wide Web, and in which year?
+
+Answer only from Google Search results. Cite the primary source of truth (official documentation, standards body or publisher of record) where the answer can be checked.
+status       : ok
+model        : gemini-3.8-flash
+status (API) : completed
+------------------------------------------------------------------------
+duration     : total 10,241 ms | gemini 9,666 ms | sources/redirects 575 ms
+tokens       : input 160 | output 255 | thought 492 | tool_use 0 | total 907
+grounding    : google_search=2
+steps        : google_search_call -> google_search_result -> thought -> model_output
+search calls : 2
+   - World Wide Web proposal Tim Berners Lee year CERN primary source
+   - Information Management A Proposal Tim Berners Lee March 1989 CERN
+------------------------------------------------------------------------
+citations    : 10 annotations, 7 distinct URLs (7 redirects)
+sources      : 7 after resolve/merge/check (max_sources=10)
+   1. home.cern                        evidence=3  https://home.cern/world-wide-web-35/
+   2. www.timeline-explorer.com        evidence=1  https://www.timeline-explorer.com/timeline/computing/items/world-wide-web-proposed/1997
+   3. ifs.uoregon.edu                  evidence=1  https://ifs.uoregon.edu/2024/09/10/cern70-where-the-web-was-born/
+   4. www.w3.org                       evidence=2  https://www.w3.org/History/1989/proposal.html
+   5. apice.unibo.it                   evidence=1  https://apice.unibo.it/bin/view/Publication/Bernerslee1989
+   6. info.cern.ch                     evidence=1  https://info.cern.ch/Proposal.html
+   7. www.w3.org                       evidence=1  https://www.w3.org/History/1989/proposal-msw.html
+------------------------------------------------------------------------
+answer       : 657 chars / 657 bytes
+  The World Wide Web was proposed by **Tim Berners-Lee** in **1989** (specifically in March 1989).   *(Note: In November 1990, Berners-Lee, together with CERN colleague Robert Cailliau, published a formalised management proposal titled "WorldWideWeb: Proposal for a HyperText Project".)*  ---  ### Primary Source of Truth * **Document:** *Information Management: A Proposal* by Tim Berners-Lee (March 1989). * **Publisher of Record / Standards Bodies:**    * **CERN** (European Organization for Nuclear Research) historical records and archives (`info.cern.ch` / `cern.ch`).   * **World Wide Web Consortium (W3C)** Historical Archive (`w3.org/History/1989/`).
+------------------------------------------------------------------------

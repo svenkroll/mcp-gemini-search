@@ -1,0 +1,26 @@
+------------------------------------------------------------------------
+query        : What is the latest feature release of Python?
+
+Answer only from Google Search results. Cite the primary source of truth (official documentation, standards body or publisher of record) where the answer can be checked.
+status       : ok
+model        : gemini-3.8-flash
+status (API) : completed
+------------------------------------------------------------------------
+duration     : total 10,238 ms | gemini 9,841 ms | sources/redirects 398 ms
+tokens       : input 184 | output 167 | thought 457 | tool_use 0 | total 808
+grounding    : google_search=2
+steps        : google_search_call -> google_search_result -> thought -> model_output
+search calls : 2
+   - python latest feature release python org downloads
+   - python releases site python org
+------------------------------------------------------------------------
+citations    : 7 annotations, 4 distinct URLs (4 redirects)
+sources      : 4 after resolve/merge/check (max_sources=10)
+   1. www.python.org                   evidence=4  https://www.python.org/downloads/
+   2. www.python.org                   evidence=1  https://www.python.org/download/releases/
+   3. www.python.org                   evidence=1  https://www.python.org/downloads/release/python-31216/
+   4. devguide.python.org              evidence=1  https://devguide.python.org/versions/
+------------------------------------------------------------------------
+answer       : 468 chars / 468 bytes
+  According to the official Python Software Foundation documentation, the latest feature release series of Python is **Python 3.15** (initially released as Python 3.15.0 on October 9, 2026, with the latest maintenance release being Python 3.15.2).   **Primary Source of Truth:** * Official Documentation / Downloads: [Python.org Downloads](https://www.python.org/downloads/) / [Python Developer's Guide - Status of Python Versions](https://devguide.python.org/versions/)
+------------------------------------------------------------------------

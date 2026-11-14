@@ -13,4 +13,3 @@ allowed_sources:
 - python.org
 ground_truth_date: 2026-11-12
 expected_outcome: answer_with_sources
-draft: true

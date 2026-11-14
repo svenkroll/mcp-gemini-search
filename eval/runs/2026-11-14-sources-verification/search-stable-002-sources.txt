@@ -1,0 +1,26 @@
+------------------------------------------------------------------------
+query        : What is the exact speed of light in vacuum in metres per second?
+
+Answer only from Google Search results. Cite the primary source of truth (official documentation, standards body or publisher of record) where the answer can be checked.
+status       : ok
+model        : gemini-3.8-flash
+status (API) : completed
+------------------------------------------------------------------------
+duration     : total 13,912 ms | gemini 13,619 ms | sources/redirects 293 ms
+tokens       : input 327 | output 275 | thought 426 | tool_use 0 | total 1028
+grounding    : google_search=2
+steps        : google_search_call -> google_search_result -> google_search_call -> google_search_result -> thought -> model_output
+search calls : 2
+   - speed of light in vacuum exact BIPM NIST metres per second
+   - "299 792 458" "BIPM" "speed of light in vacuum"
+------------------------------------------------------------------------
+citations    : 5 annotations, 4 distinct URLs (4 redirects)
+sources      : 4 after resolve/merge/check (max_sources=10)
+   1. physics.nist.gov                 evidence=2  https://physics.nist.gov/cgi-bin/cuu/Value?c
+   2. en.wikipedia.org                 evidence=1  https://en.wikipedia.org/wiki/Speed_of_light
+   3. www.bipm.org                     evidence=1  https://www.bipm.org/en/-/resolution-cgpm-26-1
+   4. www.bipm.org                     evidence=1  https://www.bipm.org/en/-/resolution-cgpm-24-1
+------------------------------------------------------------------------
+answer       : 845 chars / 845 bytes
+  The exact speed of light in a vacuum ($c$) is **299,792,458 metres per second**.  ### Primary Source of Truth * **International Bureau of Weights and Measures (BIPM) / General Conference on Weights and Measures (CGPM):**   * The value was fixed by the CGPM at its 17th meeting (1983, Resolution 1) and reaffirmed in the SI Brochure and Resolution 1 of the 26th CGPM (2018), where the metre is defined by taking the fixed numerical value of the speed of light in vacuum, $c$, to be $299\,792\,458$ when expressed in the unit $\text{m}\cdot\text{s}^{-1}$. * **CODATA / NIST (National Institute of Standards and Technology):**   * The fundamental physical constant reference published by CODATA and host …
+------------------------------------------------------------------------

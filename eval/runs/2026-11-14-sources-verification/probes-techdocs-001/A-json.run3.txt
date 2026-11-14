@@ -1,0 +1,27 @@
+------------------------------------------------------------------------
+query        : According to the Python 3.14 documentation of the json module, what is the default value of the ensure_ascii parameter of json.dumps()?
+
+Answer only from Google Search results. Cite the primary source of truth (official documentation, standards body or publisher of record) where the answer can be checked.
+status       : ok
+model        : gemini-3.8-flash
+status (API) : completed
+------------------------------------------------------------------------
+duration     : total 11,133 ms | gemini 10,862 ms | sources/redirects 271 ms
+tokens       : input 231 | output 112 | thought 288 | tool_use 0 | total 631
+grounding    : google_search=6
+steps        : google_search_call -> google_search_result -> google_search_call -> google_search_result -> thought -> model_output
+search calls : 6
+   - python 3 14 json dumps ensure ascii
+   - site docs python org 3 14 library json html json dumps ensure ascii
+   - site docs python org 3 14 library json dumps ensure ascii
+   - "json.dumps" "ensure_ascii" site:docs.python.org/3.14/library/json.html
+   - "json.dumps(obj" "ensure_ascii=True" site:docs.python.org/3.14/
+   - "ensure_ascii=True" site:docs.python.org/3/library/json.html
+------------------------------------------------------------------------
+citations    : 4 annotations, 1 distinct URLs (1 redirects)
+sources      : 1 after resolve/merge/check (max_sources=10)
+   1. docs.python.org                  evidence=4  https://docs.python.org/3/library/json.html
+------------------------------------------------------------------------
+answer       : 346 chars / 348 bytes
+  According to the official Python documentation for the `json` module, the default value of the `ensure_ascii` parameter in `json.dumps()` is **`True`**.  ### Primary Source of Truth * **Official Documentation:** [Python Standard Library Documentation: `json — JSON encoder and decoder` (`json.dumps`)](https://docs.python.org/3/library/json.html)
+------------------------------------------------------------------------

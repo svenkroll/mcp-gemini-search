@@ -1,0 +1,32 @@
+------------------------------------------------------------------------
+query        : According to the Python 3.14 documentation of the subprocess module, what is the default value of the timeout parameter of subprocess.run()?
+
+Answer only from Google Search results. Cite the primary source of truth (official documentation, standards body or publisher of record) where the answer can be checked.
+status       : ok
+model        : gemini-3.8-flash
+status (API) : completed
+------------------------------------------------------------------------
+duration     : total 21,168 ms | gemini 20,864 ms | sources/redirects 304 ms
+tokens       : input 281 | output 189 | thought 411 | tool_use 0 | total 881
+grounding    : google_search=7
+steps        : google_search_call -> google_search_result -> google_search_call -> google_search_result -> google_search_call -> google_search_result -> google_search_call -> google_search_result -> google_search_call -> google_search_result -> thought -> model_output
+search calls : 7
+   - site:docs.python.org subprocess.run timeout None
+   - site:docs.python.org/3.14 subprocess.run timeout
+   - site:docs.python.org/3.14/library/subprocess.html "subprocess.run" "timeout="
+   - "subprocess.run(" site:docs.python.org/3.14/library/
+   - site:docs.python.org/3.14/library/ subprocess
+   - "subprocess.run" "timeout=None" "docs.python.org"
+   - "subprocess — Subprocess management" "3.14" site:docs.python.org
+------------------------------------------------------------------------
+citations    : 5 annotations, 5 distinct URLs (4 redirects)
+sources      : 4 after resolve/merge/check (max_sources=10)
+   1. docs.python.org                  evidence=2  https://docs.python.org/3/library/subprocess.html
+   2. docs.python.org                  evidence=1  https://docs.python.org/el/3.14/improve-page.html?pagetitle=subprocess+%E2%80%94+Subprocess+management&pageurl=https%3A%2F%2Fdocs.python.org%2Fel%2F3.14%2Flibrary%2Fsubprocess.html&pagesource=library%2Fsubprocess.rst
+   3. docs.python.org                  evidence=1  https://docs.python.org/ru/3.14/improve-page.html?pagetitle=subprocess+%E2%80%94+Subprocess+management&pageurl=https%3A%2F%2Fdocs.python.org%2Fru%2F3.14%2Flibrary%2Fsubprocess.html&pagesource=library%2Fsubprocess.rst
+   4. github.com                       evidence=1  https://github.com/vlang/v/issues/6041
+  note: 1 distinct citation URL(s) merged, dropped or cut by max_sources
+------------------------------------------------------------------------
+answer       : 592 chars / 594 bytes
+  According to the Python documentation for the `subprocess` module, the default value of the `timeout` parameter of `subprocess.run()` is **`None`**.   In the function's signature: ```python subprocess.run(args, *, stdin=None, input=None, stdout=None, stderr=None, capture_output=False, shell=False, cwd=None, timeout=None, check=False, encoding=None, errors=None, text=None, env=None, universal_newli …
+------------------------------------------------------------------------

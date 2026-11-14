@@ -1,0 +1,24 @@
+------------------------------------------------------------------------
+query        : When did CISA publish its Known Exploited Vulnerabilities catalog, and under which directive?
+
+Answer only from Google Search results. Cite the primary source of truth (official documentation, standards body or publisher of record) where the answer can be checked.
+status       : ok
+model        : gemini-3.8-flash
+status (API) : completed
+------------------------------------------------------------------------
+duration     : total 9,631 ms | gemini 9,343 ms | sources/redirects 287 ms
+tokens       : input 180 | output 145 | thought 444 | tool_use 0 | total 769
+grounding    : google_search=2
+steps        : google_search_call -> google_search_result -> thought -> model_output
+search calls : 2
+   - Binding Operational Directive CISA Known Exploited Vulnerabilities catalog
+   - CISA Known Exploited Vulnerabilities catalog published date directive
+------------------------------------------------------------------------
+citations    : 3 annotations, 2 distinct URLs (2 redirects)
+sources      : 2 after resolve/merge/check (max_sources=10)
+   1. www.cisa.gov                     evidence=2  https://www.cisa.gov/news-events/directives/bod-22-01-reducing-significant-risk-known-exploited-vulnerabilities-revoked
+   2. www.cybersecuritydatabase.org    evidence=1  https://www.cybersecuritydatabase.org/en/documents/us-bod-22-01-known-exploited-vulnerabilities-2021/
+------------------------------------------------------------------------
+answer       : 539 chars / 539 bytes
+  The Cybersecurity and Infrastructure Security Agency (CISA) published the Known Exploited Vulnerabilities (KEV) catalog on **November 3, 2021**, pursuant to **Binding Operational Directive (BOD) 22-01**, titled *"Reducing the Significant Risk of Known Exploited Vulnerabilities"*.  **Primary Source of Truth:** * Official Documentation: Cybersecurity and Infrastructure Security Agency (CISA), **Binding Operational Directive 22-01: Reducing the Significant Risk of Known Exploited Vulnerabilities** (Published November 3, 2021; CISA.gov).
+------------------------------------------------------------------------

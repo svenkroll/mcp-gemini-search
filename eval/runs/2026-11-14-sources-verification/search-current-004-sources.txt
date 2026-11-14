@@ -1,0 +1,24 @@
+------------------------------------------------------------------------
+query        : What is the latest long-term support (LTS) release of Java SE?
+
+Answer only from Google Search results. Cite the primary source of truth (official documentation, standards body or publisher of record) where the answer can be checked.
+status       : ok
+model        : gemini-3.8-flash
+status (API) : completed
+------------------------------------------------------------------------
+duration     : total 11,798 ms | gemini 11,510 ms | sources/redirects 288 ms
+tokens       : input 245 | output 100 | thought 419 | tool_use 0 | total 764
+grounding    : google_search=2
+steps        : google_search_call -> google_search_result -> thought -> model_output
+search calls : 2
+   - Oracle Java SE support roadmap LTS latest release
+   - Java SE latest LTS release Oracle
+------------------------------------------------------------------------
+citations    : 3 annotations, 2 distinct URLs (2 redirects)
+sources      : 2 after resolve/merge/check (max_sources=10)
+   1. www.oracle.com                   evidence=2  https://www.oracle.com/europe/java/technologies/java-se-support-roadmap.html
+   2. www.oracle.com                   evidence=1  https://www.oracle.com/europe/java/technologies/downloads/
+------------------------------------------------------------------------
+answer       : 286 chars / 286 bytes
+  According to Oracle's official documentation, the latest Long-Term Support (LTS) release of Java SE is **Java SE 25** (JDK 25).   * **Primary Source of Truth:** [Oracle Java SE Support Roadmap](https://www.oracle.com/java/technologies/java-se-support-roadmap.html) (Oracle Corporation).
+------------------------------------------------------------------------

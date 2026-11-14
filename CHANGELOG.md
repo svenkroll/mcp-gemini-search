@@ -35,9 +35,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   scored for correctness only, groundedness and source quality apply to
   `search` `answer_with_sources` and `analyze_url` `answer` cases. Thresholds
   are unchanged; the server, its tool schemas and descriptions are untouched.
-  The `-sources` variants are drafts until the project owner has verified
-  them, so `make eval-validate STRICT=1` and `make eval` fail until then.
-  ADR 0005 documents the variants, the applicability table and the honesty
+  The `-sources` variants were verified against the live API on 2026-11-14
+  (`eval/runs/2026-11-14-sources-verification/`); `search-techdocs-001` asks a
+  different question since then, because the original one did not return the
+  official documentation reliably. ADR 0005 documents the variants, the applicability table and the honesty
   criterion.
 - `analyze_url` becomes optional: `search` is the core tool, ADR 0004 defines
   the role and the facts the tool description must state, without cost claims

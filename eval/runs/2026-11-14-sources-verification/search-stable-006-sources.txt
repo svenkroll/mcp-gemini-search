@@ -1,0 +1,27 @@
+------------------------------------------------------------------------
+query        : Which chemical element has the atomic number 79?
+
+Answer only from Google Search results. Cite the primary source of truth (official documentation, standards body or publisher of record) where the answer can be checked.
+status       : ok
+model        : gemini-3.8-flash
+status (API) : completed
+------------------------------------------------------------------------
+duration     : total 9,152 ms | gemini 8,848 ms | sources/redirects 304 ms
+tokens       : input 208 | output 135 | thought 324 | tool_use 0 | total 667
+grounding    : google_search=2
+steps        : google_search_call -> google_search_result -> thought -> model_output
+search calls : 2
+   - "atomic number 79" NIST periodic table gold
+   - "atomic number" 79 IUPAC periodic table gold
+------------------------------------------------------------------------
+citations    : 6 annotations, 5 distinct URLs (5 redirects)
+sources      : 5 after resolve/merge/check (max_sources=10)
+   1. en.wikipedia.org                 evidence=1  https://en.wikipedia.org/wiki/Gold
+   2. physics.nist.gov                 evidence=2  https://physics.nist.gov/PhysRefData/Handbook/Tables/goldtable1.htm
+   3. farmonaut.com                    evidence=1  https://farmonaut.com/mining/periodic-table-of-elements-au-rare-gold-element-facts
+   4. farmonaut.com                    evidence=1  https://farmonaut.com/mining/muscovite-chemical-formula-what-is-it-gold-formula-included
+   5. www.preciousmetalprices.com      evidence=1  https://www.preciousmetalprices.com/en/glossary/atomic-weight-atomic-number/
+------------------------------------------------------------------------
+answer       : 415 chars / 415 bytes
+  The chemical element with the atomic number 79 is **gold** (symbol **Au**).  **Primary source of truth:** * **National Institute of Standards and Technology (NIST)**, Physical Measurement Laboratory (*Handbook of Basic Atomic Spectroscopic Data / Atomic Data for Gold (Au)*). * **International Union of Pure and Applied Chemistry (IUPAC)** / **CIAAW** (*Periodic Table of the Elements* / *Standard Atomic Weights*).
+------------------------------------------------------------------------

@@ -12,7 +12,6 @@ expected: Java SE 25, released in September 2025, is the latest Java SE LTS rele
 allowed_sources:
 - oracle.com
 - openjdk.org
-- java.net
+- jdk.java.net
 ground_truth_date: 2026-11-12
 expected_outcome: answer_with_sources
-draft: true

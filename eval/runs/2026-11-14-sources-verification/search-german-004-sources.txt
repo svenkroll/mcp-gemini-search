@@ -1,0 +1,25 @@
+------------------------------------------------------------------------
+query        : Seit wann müssen inländische Unternehmen in Deutschland E-Rechnungen empfangen können, und welcher europäischen Norm muss eine E-Rechnung entsprechen?
+
+Answer only from Google Search results. Cite the primary source of truth (official documentation, standards body or publisher of record) where the answer can be checked.
+status       : ok
+model        : gemini-3.8-flash
+status (API) : completed
+------------------------------------------------------------------------
+duration     : total 9,147 ms | gemini 8,842 ms | sources/redirects 305 ms
+tokens       : input 301 | output 302 | thought 415 | tool_use 0 | total 1018
+grounding    : google_search=2
+steps        : google_search_call -> google_search_result -> thought -> model_output
+search calls : 2
+   - E Rechnung Europaeische Norm EN 16931 BMF
+   - E Rechnung Empfangspflicht Unternehmen Deutschland seit wann BMF
+------------------------------------------------------------------------
+citations    : 5 annotations, 3 distinct URLs (3 redirects)
+sources      : 3 after resolve/merge/check (max_sources=10)
+   1. e-rechnung-bund.de               evidence=3  https://e-rechnung-bund.de/e-rechnung/e-rechnung-zwischen-unternehmen-b2b
+   2. www.ihk.de                       evidence=1  https://www.ihk.de/darmstadt/produktmarken/recht-und-fair-play/steuerinfo/bmf-plant-verpflichtende-erechnung-und-meldesystem-5784882
+   3. ec.europa.eu                     evidence=1  https://ec.europa.eu/digital-building-blocks/sites/spaces/DIGITAL/pages/467108950/EN+16931+compliance
+------------------------------------------------------------------------
+answer       : 886 chars / 908 bytes
+  * **Seit wann gilt die Empfangspflicht?**     Inländische Unternehmen in Deutschland müssen seit dem **1. Januar 2025** in der Lage sein, elektronische Rechnungen (E-Rechnungen) im B2B-Bereich zu empfangen.  * **Welcher europäischen Norm muss eine E-Rechnung entsprechen?**     Eine E-Rechnung muss im Grundsatz der europäischen Norm **EN 16931** entsprechen.  ---  **Primäre Quellen zur Überprüfung:** * **Bundesfinanzministerium (BMF) / Plattform „E-Rechnung in der Bundesverwaltung“:**     [E-Rechnung zwischen Unternehmen (B2B) – e-rechnung-bund.de](https://e-rechnung-bund.de) (bzw. FAQ des BMF zu § 14 UStG zur obligatorischen Einführung der E-Rechnung ab dem 1. Januar 2025). * **Europäische K …
+------------------------------------------------------------------------

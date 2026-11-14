@@ -10,7 +10,6 @@ expected: Gold (Au) has the atomic number 79.
 allowed_sources:
 - iupac.org
 - nist.gov
-- nih.gov
+- pubchem.ncbi.nlm.nih.gov
 ground_truth_date: 2026-11-12
 expected_outcome: answer_with_sources
-draft: true

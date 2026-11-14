@@ -1,0 +1,28 @@
+------------------------------------------------------------------------
+query        : Which Node.js release line is currently in Active LTS?
+
+Answer only from Google Search results. Cite the primary source of truth (official documentation, standards body or publisher of record) where the answer can be checked.
+status       : ok
+model        : gemini-3.8-flash
+status (API) : completed
+------------------------------------------------------------------------
+duration     : total 13,612 ms | gemini 13,056 ms | sources/redirects 557 ms
+tokens       : input 541 | output 258 | thought 863 | tool_use 0 | total 1662
+grounding    : google_search=2
+steps        : google_search_call -> google_search_result -> thought -> model_output
+search calls : 2
+   - nodejs release schedule github
+   - nodejs releases schedule active lts dates
+------------------------------------------------------------------------
+citations    : 11 annotations, 6 distinct URLs (6 redirects)
+sources      : 6 after resolve/merge/check (max_sources=10)
+   1. hidekazu-konishi.com             evidence=1  https://hidekazu-konishi.com/entry/nodejs_release_and_eol_timeline.html
+   2. cognision.eu                     evidence=3  https://cognision.eu/blog/upgrading-to-nodejs-26-lts/
+   3. safeguard.sh                     evidence=2  https://safeguard.sh/resources/blog/how-long-is-a-nodejs-lts-release-supported
+   4. nodejs.org                       evidence=2  https://nodejs.org/en/about/previous-releases
+   5. github.com                       evidence=2  https://github.com/nodejs/release
+   6. www.flowverify.co                evidence=1  https://www.flowverify.co/blog/nodejs-27-annual-release-every-version-lts
+------------------------------------------------------------------------
+answer       : 672 chars / 672 bytes
+  **Node.js 26** is the release line in **Active LTS**.   According to the official release schedule, Node.js 26 transitioned from "Current" to "Active LTS" on October 28, 2026 (scheduled to remain in Active LTS until October 2027), while Node.js 24 transitioned to "Maintenance LTS" on October 20, 2026.  ### Primary Source of Truth * **Publisher of Record / Official Documentation:** The official Node.js Releases documentation and the Node.js Release Working Group repository:   * **Repository:** [`nodejs/Release`](https://github.com/nodejs/Release) (authoritative file: `schedule.json`)   * **Website:** [Node.js Releases](https://nodejs.org/en/about/previous-releases)
+------------------------------------------------------------------------

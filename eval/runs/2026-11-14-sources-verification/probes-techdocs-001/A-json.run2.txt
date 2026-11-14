@@ -1,0 +1,26 @@
+------------------------------------------------------------------------
+query        : According to the Python 3.14 documentation of the json module, what is the default value of the ensure_ascii parameter of json.dumps()?
+
+Answer only from Google Search results. Cite the primary source of truth (official documentation, standards body or publisher of record) where the answer can be checked.
+status       : ok
+model        : gemini-3.8-flash
+status (API) : completed
+------------------------------------------------------------------------
+duration     : total 10,691 ms | gemini 10,405 ms | sources/redirects 287 ms
+tokens       : input 300 | output 105 | thought 376 | tool_use 0 | total 781
+grounding    : google_search=4
+steps        : google_search_call -> google_search_result -> google_search_call -> google_search_result -> thought -> model_output
+search calls : 4
+   - python 3.14 doc json dumps ensure_ascii
+   - site docs python org 3 14 library json html ensure_ascii dumps
+   - site:docs.python.org/3.14/library/json.html "json.dumps" "ensure_ascii"
+   - site:docs.python.org/3/library/json.html "json.dumps" "ensure_ascii"
+------------------------------------------------------------------------
+citations    : 3 annotations, 2 distinct URLs (2 redirects)
+sources      : 2 after resolve/merge/check (max_sources=10)
+   1. tedboy.github.io                 evidence=1  https://tedboy.github.io/python_stdlib/generated/generated/json.dumps.html
+   2. docs.python.org                  evidence=2  https://docs.python.org/3/library/json.html
+------------------------------------------------------------------------
+answer       : 337 chars / 341 bytes
+  According to the official Python documentation for the `json` module, the default value of the `ensure_ascii` parameter in `json.dumps()` is **`True`**.  **Primary source of truth:** * **Official Python Documentation:** [Python Standard Library – `json` — JSON encoder and decoder](https://docs.python.org/3/library/json.html#json.dumps)
+------------------------------------------------------------------------

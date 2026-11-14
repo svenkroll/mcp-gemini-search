@@ -8,7 +8,7 @@ input:
     Answer only from Google Search results. Cite the primary source of truth (official documentation, standards body or publisher of record) where the answer can be checked.
 expected: Cyprus joined the European Union on 1 May 2004.
 allowed_sources:
-- europa.eu
+- ec.europa.eu
+- european-union.europa.eu
 ground_truth_date: 2026-11-12
 expected_outcome: answer_with_sources
-draft: true

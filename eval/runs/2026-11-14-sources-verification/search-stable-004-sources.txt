@@ -1,0 +1,23 @@
+------------------------------------------------------------------------
+query        : When did Cyprus join the European Union?
+
+Answer only from Google Search results. Cite the primary source of truth (official documentation, standards body or publisher of record) where the answer can be checked.
+status       : ok
+model        : gemini-3.8-flash
+status (API) : completed
+------------------------------------------------------------------------
+duration     : total 7,310 ms | gemini 6,956 ms | sources/redirects 353 ms
+tokens       : input 142 | output 144 | thought 101 | tool_use 0 | total 387
+grounding    : google_search=1
+steps        : google_search_call -> google_search_result -> thought -> model_output
+search calls : 1
+   - Cyprus European Union accession date site europa eu
+------------------------------------------------------------------------
+citations    : 4 annotations, 2 distinct URLs (2 redirects)
+sources      : 2 after resolve/merge/check (max_sources=10)
+   1. cyprus.representation.ec.europa.eu evidence=3  https://cyprus.representation.ec.europa.eu/about-us/cyprus-eu_en
+   2. www.brightlms.eu                 evidence=1  https://www.brightlms.eu/unit/cyprus-accession-in-the-eu-chapter-1-cy/
+------------------------------------------------------------------------
+answer       : 462 chars / 462 bytes
+  Cyprus joined the European Union on **May 1, 2004**.  **Primary source of record:** * **European Commission (Official Representation in Cyprus):** *Cyprus in the EU* timeline confirms that on 1 May 2004, Cyprus became a member state of the European Union following the signing of the Treaty of Accession in Athens on 16 April 2003. Official EU portal: [European Commission Representation in Cyprus - Cyprus in the EU](https://cyprus.representation.ec.europa.eu).
+------------------------------------------------------------------------

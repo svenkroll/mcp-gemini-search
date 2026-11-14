@@ -11,6 +11,7 @@ allowed_sources:
 - bundesfinanzministerium.de
 - gesetze-im-internet.de
 - xeinkauf.de
+- e-rechnung-bund.de
+- ec.europa.eu
 ground_truth_date: 2026-11-12
 expected_outcome: answer_with_sources
-draft: true

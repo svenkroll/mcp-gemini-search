@@ -1,0 +1,29 @@
+------------------------------------------------------------------------
+query        : Wie viele Bits umfasst eine IPv6-Adresse, und in welchem RFC ist die IPv6-Adressarchitektur festgelegt?
+
+Answer only from Google Search results. Cite the primary source of truth (official documentation, standards body or publisher of record) where the answer can be checked.
+status       : ok
+model        : gemini-3.8-flash
+status (API) : completed
+------------------------------------------------------------------------
+duration     : total 15,246 ms | gemini 14,694 ms | sources/redirects 551 ms
+tokens       : input 270 | output 252 | thought 357 | tool_use 0 | total 879
+grounding    : google_search=3
+steps        : google_search_call -> google_search_result -> google_search_call -> google_search_result -> google_search_call -> google_search_result -> thought -> model_output
+search calls : 3
+   - RFC IPv6 addressing architecture bits
+   - "RFC 4291" "IP Version 6 Addressing Architecture"
+   - "RFC 4291" "128-bit" "IPv6 addresses are"
+------------------------------------------------------------------------
+citations    : 8 annotations, 6 distinct URLs (6 redirects)
+sources      : 5 after resolve/merge/check (max_sources=10)
+   1. docs.oracle.com                  evidence=1  https://docs.oracle.com/cd/E19253-01/816-4554/ipv6-overview-10/index.html
+   2. manual.mikrotik.com              evidence=1  https://manual.mikrotik.com/docs/getting-started/networking-fundamentals/ipv6-addresses/
+   3. www.rfc-editor.org               evidence=4  https://www.rfc-editor.org/info/rfc4291/
+   4. www.arc-it.net                   evidence=1  https://www.arc-it.net/html/standards/standard798.html
+   5. ipv6now.com.au                   evidence=1  https://ipv6now.com.au/RFC.php
+  note: 1 distinct citation URL(s) merged, dropped or cut by max_sources
+------------------------------------------------------------------------
+answer       : 664 chars / 675 bytes
+  Eine IPv6-Adresse umfasst **128 Bits** (entspricht 16 Bytes).  Die grundlegende IPv6-Adressarchitektur (*IP Version 6 Addressing Architecture*) ist durch die **Internet Engineering Task Force (IETF)** im Standard **RFC 4291** festgelegt (welcher ältere Spezifikationen wie RFC 3513, RFC 2373 und RFC 1884 ersetzt hat).  **Primärquelle zum Nachschlagen:** * **Standardisierungsorganisation / Primärquelle:** IETF (Internet Engineering Task Force) / RFC Editor * **Dokument:** [RFC 4291 – IP Version 6 Addressing Architecture](https://www.rfc-editor.org/rfc/rfc4291) (Abschnitt 2: *„IPv6 addresses are 128-bit identifiers for interfaces and sets of interfaces […]“*)
+------------------------------------------------------------------------
