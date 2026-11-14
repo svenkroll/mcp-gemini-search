@@ -30,7 +30,8 @@ The `Dockerfile` builds a multi-stage image for `linux/amd64` and
 - The image contains no secret and reads no `.env` file. `.dockerignore` keeps
   `.env`, `.venv`, caches, `eval/runs/` and `.git` out of the build context.
 
-CI never publishes the image. Build it yourself:
+Only the release workflow publishes the image (see "Release" in the
+[README](../README.md#release)). CI never does. Build it yourself:
 
 ```bash
 docker build -t gemini-search-mcp:local .
@@ -275,8 +276,8 @@ gateway in front of the pod needs the timeouts and header rules above.
 
 ## Running the CI scripts locally
 
-The `container` job of `.github/workflows/ci.yml` only calls scripts under
-`scripts/ci/`. Run them from any directory inside the repository. Prerequisites
+The `container` job of `.github/workflows/ci.yml` and the workflow
+`.github/workflows/release.yml` only call scripts under `scripts/ci/`. Run them from any directory inside the repository. Prerequisites
 besides `make install`: Docker (Compose v2 for the proxy test), `curl` and
 `git`. The scripts exit with 0 on success.
 
@@ -290,6 +291,9 @@ besides `make install`: Docker (Compose v2 for the proxy test), `curl` and
 | Image scan | `scripts/ci/scan-image.sh gemini-search-mcp:ci` | report of CRITICAL and HIGH findings; exit 1 only for CRITICAL |
 | Smoke test | `scripts/ci/smoke-test.sh gemini-search-mcp:ci` | four `ok:` lines: non-root user, exit code 2 without `GEMINI_API_KEY`, `/health/ready` 200 with a read-only filesystem, `/mcp` without token 401 |
 | Proxy test | `scripts/ci/proxy-test.sh` | fifteen `ok: json: ...` and `ok: sse: ...` lines; takes about 80 seconds, needs host port 8080 |
+| Check a release tag | `scripts/ci/check-release-tag.sh v0.1.0` | `version=0.1.0` and `revision=<sha>` on stdout; exit 1 for an invalid tag, a version that differs from `project.version` or a commit outside `origin/main` (`RELEASE_MAIN_REF` overrides the ref) |
+| Log in to a registry | `REGISTRY_USER=<user> REGISTRY_TOKEN=<token> scripts/ci/registry-login.sh ghcr.io` | `docker login` succeeds; the token is read from the environment and never printed |
+| Publish a manifest list | `scripts/ci/publish-manifest.sh <image> <version> <sha> <digest>...` | creates exactly the tags `<version>` and `<sha>`; only run by the release workflow after every check passed |
 | Aggregate results | `scripts/ci/require-success.sh a=success b=skipped` | exit 0; `failure` or `cancelled` gives exit 1 |
 
 Details per script are in its header comment. Useful variables:

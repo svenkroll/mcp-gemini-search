@@ -14,7 +14,8 @@ page lacks the answer, `analyze_url` says so.
 The server is built for personal use: one static bearer token, no user
 management. It runs over stdio for local clients and over stateless Streamable
 HTTP for remote ones. A multi-architecture container image and a local Docker
-Compose setup with Caddy are in the repository; images are not published.
+Compose setup with Caddy are in the repository; the project owner publishes
+released versions of the image to GHCR ([Release](#release)).
 
 > [!IMPORTANT]
 > **Running this server costs money, and it does not work with the Gemini free
@@ -47,6 +48,7 @@ Compose setup with Caddy are in the repository; images are not published.
   - [Costs](#costs): prices and what a call costs
 - Develop
   - [Development](#development)
+  - [Release](#release): publishing the container image
   - [Documentation](#documentation)
 
 ## Tools
@@ -520,8 +522,9 @@ openhands mcp add gemini-search --transport http \
 The `Dockerfile` builds a multi-stage image for `linux/amd64` and
 `linux/arm64`. It contains no dev dependencies and no secrets, runs as the
 numeric non-root user `10001` and writes only to stdout and stderr. It starts
-with `MCP_TRANSPORT=http` and `MCP_HOST=0.0.0.0`. Images are not published;
-build your own.
+with `MCP_TRANSPORT=http` and `MCP_HOST=0.0.0.0`. Released versions are
+published to `ghcr.io/svenkroll/mcp-gemini-search` ([Release](#release)); you
+can also build your own.
 
 `compose.yaml` starts the server and Caddy locally. Secrets come from a local
 `.env` file that is never committed and never part of the image:
@@ -701,12 +704,107 @@ tests/integration/      Integration tests
 tests/fixtures/         Controlled fixtures
 eval/                   Ground-truth catalog and evaluation script
 docs/                   ADRs, runbook, tech debt, additional documentation
-scripts/ci/             CI scripts called by the workflow
+scripts/ci/             CI scripts called by the workflows
 Dockerfile              Container image
 compose.yaml            Local setup: server and Caddy
 Caddyfile               Local reverse proxy configuration
-.github/workflows/      CI
+.github/workflows/      CI and release workflows
 ```
+
+## Release
+
+A release is a version tag that the project owner sets. The workflow
+`.github/workflows/release.yml` then builds the image natively for
+`linux/amd64` and `linux/arm64`, checks it and publishes it to
+`ghcr.io/svenkroll/mcp-gemini-search`. The rules are in section "Release" of
+[ADR 0011](docs/adr/0011-container-and-ci.md).
+
+### Prepare a release
+
+1. Raise `version` in the `[project]` table of `pyproject.toml` in a pull request
+   and merge it to `main`. Use a PEP 440 version: `0.1.0` for a release,
+   `0.1.0rc1` for a pre-release. Move the `Unreleased` entries of
+   `CHANGELOG.md` under the new version in the same pull request.
+2. Update your local `main` and set the tag on the merge commit. The tag is
+   `v` plus the SemVer version; for a pre-release the PEP 440 `0.1.0rc1`
+   becomes `v0.1.0-rc.1`.
+
+   ```bash
+   git switch main && git pull --ff-only
+   git tag v0.1.0
+   scripts/ci/check-release-tag.sh v0.1.0   # prints version=0.1.0 and revision=<sha>
+   git push origin v0.1.0
+   ```
+
+   The check script is the same one the workflow runs first. It accepts only
+   `v<MAJOR>.<MINOR>.<PATCH>` with an optional pre-release
+   `-<alpha|a|beta|b|rc>[.<n>]`, rejects build metadata (`v1.0.0+build.5`, image
+   tags cannot contain `+`), requires the tag version to equal
+   `project.version` after PEP 440 normalization and requires the tagged commit
+   to be on `main`. When a check fails, the workflow fails and nothing is built
+   or pushed.
+
+### Follow the workflow
+
+Pushing the tag starts the workflow `release` (Actions tab, or
+`gh run watch`). Its jobs run in this order:
+
+1. `tag-check`: the check above.
+2. `dockerfile-lint`: Hadolint on the `Dockerfile`.
+3. `image-amd64` and `image-arm64`, in parallel on native runners: build, push
+   by digest without a tag, pull the pushed digest back, image scan (fails on
+   CRITICAL findings) and smoke test.
+4. `publish`: only when both architectures passed, one manifest list is created
+   from the two checked digests with exactly two tags, the version without
+   `v` (for example `0.1.0` or `1.0.0-rc.1`) and the full commit SHA. There is
+   no `latest` and no other floating tag. Pre-releases are published the same
+   way.
+
+If any check of any architecture fails, `publish` does not run and the tags in
+GHCR stay as they were.
+
+### Check the image in GHCR
+
+```bash
+docker buildx imagetools inspect ghcr.io/svenkroll/mcp-gemini-search:0.1.0
+docker buildx imagetools inspect ghcr.io/svenkroll/mcp-gemini-search:<full commit sha>
+```
+
+Both commands must show the same manifest list digest and one manifest for
+`linux/amd64` and one for `linux/arm64`. The labels
+`org.opencontainers.image.source`, `.version` and `.revision` are on each
+manifest. The package page is
+`https://github.com/svenkroll/mcp-gemini-search/pkgs/container/mcp-gemini-search`.
+
+After the first release only, set the package to public: package page,
+"Package settings", "Change visibility". GHCR does not take over the
+visibility of the repository. Then set the ADRs to `accepted`.
+
+### Clean up after a failed run
+
+Every build job pushes its image by digest before the checks run, so a failed
+run leaves untagged digests in GHCR. They are harmless but should be deleted:
+
+1. Open the failed run and note the digests of the jobs `image-amd64` and
+   `image-arm64` (output `digest` of the step "Build and push ...").
+2. Delete exactly those versions on the package page ("Package settings" of
+   the version, "Delete version"), or with the GitHub CLI (needs the scopes
+   `read:packages` and `delete:packages`, add them with
+   `gh auth refresh -s read:packages,delete:packages`):
+
+   ```bash
+   gh api --paginate /user/packages/container/mcp-gemini-search/versions \
+     --jq '.[] | select(.name == "sha256:<digest>") | .id'
+   gh api --method DELETE /user/packages/container/mcp-gemini-search/versions/<id>
+   ```
+
+Never delete the untagged versions of a run that succeeded: they are the
+per-architecture images that the published manifest list points to.
+
+To release again after a fix, merge the fix to `main` and raise the version.
+Moving a published tag is possible (`git push --delete origin v0.1.0`, `git tag
+-f v0.1.0 <new commit>`, `git push origin v0.1.0`) but changes what the version
+tag in GHCR points to, so prefer a new version.
 
 ## Documentation
 

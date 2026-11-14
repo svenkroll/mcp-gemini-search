@@ -44,5 +44,37 @@
 # Prerequisites: Docker with Buildx, logged in to the registry of <image>.
 set -euo pipefail
 
-echo "not implemented" >&2
-exit 1
+[[ $# -ge 4 ]] || {
+  echo "usage: scripts/ci/publish-manifest.sh <image> <version> <revision> <digest>..." >&2
+  exit 2
+}
+image=$1
+version=$2
+revision=$3
+shift 3
+
+# A Docker tag: up to 128 characters of [A-Za-z0-9_.-], not starting with "." or "-".
+[[ $version =~ ^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$ ]] || {
+  echo "version is not a valid image tag: $version" >&2
+  exit 2
+}
+[[ $revision =~ ^[0-9a-f]{40}$ ]] || {
+  echo "revision is not a 40-character lowercase hex SHA: $revision" >&2
+  exit 2
+}
+sources=()
+for digest in "$@"; do
+  [[ $digest =~ ^sha256:[0-9a-f]{64}$ ]] || {
+    echo "digest is not sha256:<64 lowercase hex>: $digest" >&2
+    exit 2
+  }
+  sources+=("$image@$digest")
+done
+docker buildx version >/dev/null 2>&1 || {
+  echo "Docker Buildx is not available" >&2
+  exit 2
+}
+
+docker buildx imagetools create \
+  --tag "$image:$version" --tag "$image:$revision" "${sources[@]}" || exit 1
+docker buildx imagetools inspect "$image:$version" || exit 1

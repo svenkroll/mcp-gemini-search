@@ -63,5 +63,111 @@
 # fetch-depth: 0 in CI).
 set -euo pipefail
 
-echo "not implemented" >&2
-exit 1
+readonly SEMVER_RE='^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-((0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*)(\.(0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*))*))?$'
+readonly PRERELEASE_RE='^(alpha|a|beta|b|rc)(\.(0|[1-9][0-9]*))?$'
+
+[[ $# -eq 1 ]] || {
+  echo "usage: scripts/ci/check-release-tag.sh <tag>" >&2
+  exit 2
+}
+tag=$1
+main_ref=${RELEASE_MAIN_REF:-origin/main}
+
+# Check 1: format.
+if [[ ! $tag =~ $SEMVER_RE ]]; then
+  echo "format check failed: '$tag' is not v<MAJOR>.<MINOR>.<PATCH>[-<pre-release>] without build metadata" >&2
+  exit 1
+fi
+major=${BASH_REMATCH[1]}
+minor=${BASH_REMATCH[2]}
+patch=${BASH_REMATCH[3]}
+prerelease=${BASH_REMATCH[5]}
+
+# Check 2: pre-release, mapped to its PEP 440 form.
+pep440="$major.$minor.$patch"
+if [[ -n $prerelease ]]; then
+  if [[ ! $prerelease =~ $PRERELEASE_RE ]]; then
+    echo "pre-release check failed: '$prerelease' is not <alpha|a|beta|b|rc>[.<n>]" >&2
+    exit 1
+  fi
+  label=${BASH_REMATCH[1]}
+  number=${BASH_REMATCH[3]:-0}
+  case $label in
+    alpha) label=a ;;
+    beta) label=b ;;
+    *) ;;
+  esac
+  pep440="$pep440$label$number"
+fi
+
+commit=$(git rev-parse --verify --quiet "refs/tags/$tag^{commit}") || {
+  echo "unknown tag: $tag" >&2
+  exit 2
+}
+main_commit=$(git rev-parse --verify --quiet "$main_ref^{commit}") || {
+  echo "unknown RELEASE_MAIN_REF: $main_ref" >&2
+  exit 2
+}
+
+# Check 3: the tag version equals project.version at the tagged commit.
+pyproject=$(git show "$commit:pyproject.toml" 2>/dev/null) || {
+  echo "pyproject.toml is missing at commit $commit" >&2
+  exit 2
+}
+# Exit 0: equal. Exit 1: different. Exit 2: no string project.version.
+status=0
+printf '%s' "$pyproject" | python3 -c '
+import re
+import sys
+import tomllib
+
+expected = sys.argv[1]
+try:
+    version = tomllib.loads(sys.stdin.read()).get("project", {}).get("version")
+except tomllib.TOMLDecodeError as error:
+    print(f"pyproject.toml is not valid TOML: {error}", file=sys.stderr)
+    sys.exit(2)
+if not isinstance(version, str):
+    print("pyproject.toml has no string project.version", file=sys.stderr)
+    sys.exit(2)
+
+# Only a release segment of three numbers and an optional pre-release can
+# match a SemVer tag; epoch, post, dev and local segments never match.
+pattern = re.compile(
+    r"v?(\d+)\.(\d+)\.(\d+)(?:[-_.]?(alpha|a|beta|b|c|rc|pre|preview)[-_.]?(\d*))?",
+    re.IGNORECASE,
+)
+match = pattern.fullmatch(version.strip())
+normalized = None
+if match:
+    major, minor, patch, label, number = match.groups()
+    normalized = f"{int(major)}.{int(minor)}.{int(patch)}"
+    if label:
+        label = {"alpha": "a", "beta": "b", "c": "rc", "pre": "rc", "preview": "rc"}.get(
+            label.lower(), label.lower()
+        )
+        normalized += f"{label}{int(number or 0)}"
+if normalized != expected:
+    print(
+        f"version check failed: tag version {expected!r} differs from"
+        f" project.version {version!r} (normalized: {normalized!r})",
+        file=sys.stderr,
+    )
+    sys.exit(1)
+' "$pep440" || status=$?
+if [[ $status -ne 0 ]]; then
+  exit "$status"
+fi
+
+# Check 4: the tagged commit is on main.
+if ! git merge-base --is-ancestor "$commit" "$main_commit"; then
+  echo "branch check failed: commit $commit of $tag is not on $main_ref" >&2
+  exit 1
+fi
+
+output="version=${tag#v}
+revision=$commit"
+printf '%s\n' "$output"
+if [[ -n ${GITHUB_OUTPUT:-} ]]; then
+  printf '%s\n' "$output" >>"$GITHUB_OUTPUT"
+fi

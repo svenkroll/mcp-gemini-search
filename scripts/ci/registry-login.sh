@@ -34,5 +34,21 @@
 # Prerequisites: Docker.
 set -euo pipefail
 
-echo "not implemented" >&2
-exit 1
+[[ $# -eq 1 ]] || {
+  echo "usage: scripts/ci/registry-login.sh <registry>" >&2
+  exit 2
+}
+registry=$1
+
+[[ -n ${REGISTRY_USER:-} && -n ${REGISTRY_TOKEN:-} ]] || {
+  echo "REGISTRY_USER and REGISTRY_TOKEN must be set and not empty" >&2
+  exit 2
+}
+command -v docker >/dev/null 2>&1 || {
+  echo "Docker is not available" >&2
+  exit 2
+}
+
+# The token goes through stdin, never through a command line.
+printf '%s' "$REGISTRY_TOKEN" |
+  docker login "$registry" --username "$REGISTRY_USER" --password-stdin || exit 1
