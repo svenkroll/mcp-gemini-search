@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- #11: A multi-arch (`linux/amd64`, `linux/arm64`) container image: multi-stage
+  `Dockerfile` on a digest-pinned slim Python 3.14 image with `uv`, runtime
+  dependencies only, non-root user, defaults `MCP_TRANSPORT=http` and
+  `MCP_HOST=0.0.0.0`. `compose.yaml` and `Caddyfile` start the server behind a
+  local Caddy proxy with long read timeouts, no response buffering and unchanged
+  MCP headers. The CI job `container` runs Hadolint, builds both architectures,
+  scans the image with Trivy and smoke-tests it. `docs/runbook.md` describes
+  secrets, local start, proxy settings (Caddy, Traefik, HAProxy) and Kubernetes
+  probes.
+
 ### Fixed
 
 - #31: The loggers of the HTTP client libraries and the Google GenAI SDK are

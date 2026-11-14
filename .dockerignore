@@ -1,0 +1,31 @@
+# Keep secrets, local environments and everything the image does not need out
+# of the build context.
+.env
+.env.*
+!.env.example
+.venv/
+.git/
+.github/
+.claude/
+.issue-drafts/
+.gitignore
+
+# Caches and build artifacts
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.pytest_cache/
+.ruff_cache/
+.ty_cache/
+.mypy_cache/
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+
+# Evaluation runs, tests and documentation are not part of the image
+eval/runs/
+tests/
+docs/

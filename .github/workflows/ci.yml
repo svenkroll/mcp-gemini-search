@@ -43,3 +43,98 @@ jobs:
 
       - name: Test
         run: make test
+
+  container:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      IMAGE: gemini-search-mcp:ci
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Install Hadolint
+        run: |
+          curl -fsSL --retry 3 -o /tmp/hadolint \
+            https://github.com/hadolint/hadolint/releases/download/v2.15.1/hadolint-linux-x86_64
+          echo "c7187db94eeeeca956519a6af171adc31453941a1e777961f6e680f697c8c507  /tmp/hadolint" | sha256sum --check --strict
+          install -m 755 /tmp/hadolint /usr/local/bin/hadolint
+          hadolint --version
+
+      - name: Install Trivy
+        run: |
+          curl -fsSL --retry 3 -o /tmp/trivy.tar.gz \
+            https://github.com/aquasecurity/trivy/releases/download/v0.76.2/trivy_0.76.2_Linux-64bit.tar.gz
+          echo "bc0fc726e017b8927a62b2d3531d7a84ee01769daf5c99ed866dced54089fdbf  /tmp/trivy.tar.gz" | sha256sum --check --strict
+          mkdir /tmp/trivy
+          tar -xzf /tmp/trivy.tar.gz -C /tmp/trivy trivy
+          install -m 755 /tmp/trivy/trivy /usr/local/bin/trivy
+          trivy --version
+
+      - name: Lint Dockerfile
+        run: hadolint Dockerfile
+
+      - name: Set up multi-arch builder
+        run: |
+          docker run --privileged --rm \
+            tonistiigi/binfmt@sha256:400a4873b838d1b89194d982c45e5fb3cda4593fbfd7e08a02e76b03b21166f0 \
+            --install arm64
+          docker buildx create --name ci-builder --driver docker-container \
+            --driver-opt image=moby/buildkit:v0.35.0@sha256:aa632b921ef07411d2cb77292cd34213d4f7b384001d6fceef1e1f25bf9752bb \
+            --use
+          docker buildx inspect --bootstrap
+
+      - name: Build linux/amd64 and linux/arm64
+        run: |
+          docker buildx build --platform linux/amd64,linux/arm64 \
+            --output type=cacheonly --file Dockerfile .
+
+      - name: Build linux/amd64 image for scan and smoke test
+        run: |
+          docker buildx build --platform linux/amd64 --load --tag "$IMAGE" --file Dockerfile .
+
+      - name: Scan image with Trivy
+        run: |
+          trivy image --no-progress --ignore-unfixed --severity CRITICAL,HIGH --exit-code 1 "$IMAGE"
+
+      - name: Smoke test
+        run: |
+          set -euo pipefail
+          # Dummy configuration, not a secret. The token has 41 characters.
+          token="ci-smoke-$(printf '%032d' 0)"
+
+          # The image runs as a numeric non-root user.
+          test "$(docker inspect --format '{{.Config.User}}' "$IMAGE")" = "10001:10001"
+
+          # Without GEMINI_API_KEY the container exits with code 2 and names the variable.
+          status=0
+          docker run --rm -e MCP_BEARER_TOKEN="$token" "$IMAGE" >/tmp/missing-key.log 2>&1 || status=$?
+          cat /tmp/missing-key.log
+          test "$status" -eq 2
+          grep -q GEMINI_API_KEY /tmp/missing-key.log
+
+          # With a dummy configuration and a read-only root filesystem it serves requests.
+          docker run --detach --name smoke --read-only --cap-drop ALL \
+            --security-opt no-new-privileges --publish 127.0.0.1:8000:8000 \
+            -e GEMINI_API_KEY=dummy-key-for-smoke-test -e MCP_BEARER_TOKEN="$token" "$IMAGE"
+          trap 'docker logs smoke; docker rm --force smoke' EXIT
+
+          ready=000
+          for _ in $(seq 1 30); do
+            ready=$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8000/health/ready || true)
+            test "$ready" = 200 && break
+            sleep 1
+          done
+          echo "/health/ready: $ready"
+          test "$ready" = 200
+
+          unauthorized=$(curl -s -o /dev/null -w '%{http_code}' -X POST \
+            -H 'Content-Type: application/json' -d '{}' http://127.0.0.1:8000/mcp)
+          echo "/mcp without token: $unauthorized"
+          test "$unauthorized" = 401
+
+          # Neither secret value may appear in the container log.
+          if docker logs smoke 2>&1 | grep -q -e "$token" -e dummy-key-for-smoke-test; then
+            echo "secret value found in the container log"
+            exit 1
+          fi

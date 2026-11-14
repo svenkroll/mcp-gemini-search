@@ -1,0 +1,31 @@
+# Local reverse proxy for the Gemini Search MCP server (docs/runbook.md,
+# ADR 0002, ADR 0008). Plain HTTP on 8080; terminate TLS in front of it or
+# replace `:8080` with a host name for automatic HTTPS.
+{
+	# The proxy is only a local helper: no TLS certificates, no admin API.
+	auto_https off
+	admin off
+}
+
+:8080 {
+	reverse_proxy server:8000 {
+		# No buffering: flush every chunk of the response to the client as soon
+		# as it arrives (Streamable HTTP answers a request with a server-sent
+		# event stream). Caddy does not buffer request bodies by default.
+		flush_interval -1
+
+		transport http {
+			dial_timeout 5s
+			# A tool call can run up to GEMINI_TIMEOUT_SECONDS (at most 300 s)
+			# plus about 8 s to resolve grounding redirects (ADR 0008). 330 s
+			# keeps the proxy from cutting off the slowest legal call.
+			response_header_timeout 330s
+			read_timeout 330s
+			write_timeout 30s
+		}
+	}
+
+	# Caddy forwards all request headers unchanged by default, including
+	# MCP-Protocol-Version, Mcp-Method and Mcp-Name (ADR 0002). Do not add
+	# header_up rules that remove or rewrite them.
+}

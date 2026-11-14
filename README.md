@@ -13,7 +13,8 @@ page lacks the answer, `analyze_url` says so.
 
 The server is built for personal use: one static bearer token, no user
 management. It runs over stdio for local clients and over stateless Streamable
-HTTP for remote ones. A container image is not part of the project yet.
+HTTP for remote ones, also as a multi-arch container image
+([Container](#container)).
 
 > [!IMPORTANT]
 > **Running this server costs money, and it does not work with the Gemini free
@@ -41,6 +42,7 @@ HTTP for remote ones. A container image is not part of the project yet.
 - Operate
   - [Prerequisites](#prerequisites) and [Installation](#installation)
   - [Running the server](#running-the-server): configuration, stdio, Streamable HTTP, timeouts, logging
+  - [Container](#container): image, secrets, local start with Compose, proxy timeouts and headers
   - [Security](#security)
   - [Data protection](#data-protection)
   - [Costs](#costs): prices and what a call costs
@@ -542,6 +544,37 @@ with `LOG_QUERIES=true`. A failed call with technical details adds one
 `error_detail` line with the same `request_id`
 ([ADR 0007](docs/adr/0007-error-handling-and-logging.md)).
 
+## Container
+
+The [`Dockerfile`](Dockerfile) builds a multi-stage image for `linux/amd64` and
+`linux/arm64` from a pinned official slim Python 3.14 image. It contains only
+the locked runtime dependencies and no secrets, runs as the non-root user
+`10001`, writes only to stdout and stderr (so a read-only root filesystem
+works), and defaults to `MCP_TRANSPORT=http` and `MCP_HOST=0.0.0.0`. It is not
+published to a registry; build it with `docker build --tag gemini-search-mcp:local .`.
+
+- **Secrets:** `GEMINI_API_KEY` and `MCP_BEARER_TOKEN` are passed as
+  environment variables at run time, from an `.env` file that is never
+  committed (`docker run --env-file .env`, Compose `env_file`) or from a
+  Kubernetes `Secret`. They are never part of the image. Without a
+  `GEMINI_API_KEY` the container exits with code 2 and its log names the
+  variable.
+- **Local start:** copy `.env.example` to `.env`, fill in the two secrets and run
+  `docker compose up --build`. [`compose.yaml`](compose.yaml) starts the server
+  behind a Caddy reverse proxy ([`Caddyfile`](Caddyfile)) on
+  `http://127.0.0.1:8080/mcp`.
+- **Proxy timeouts:** a tool call can take as long as `GEMINI_TIMEOUT_SECONDS`
+  (up to 300 s) plus about 8 s. A reverse proxy needs a read timeout of at least
+  330 s and must not buffer responses.
+- **Header pass-through:** the proxy must pass `MCP-Protocol-Version`,
+  `Mcp-Method`, `Mcp-Name` and `Authorization` through unchanged
+  ([ADR 0002](docs/adr/0002-mcp-framework-and-transport.md)).
+- **Health probes:** `/health/live` and `/health/ready` on port 8000 need no
+  token.
+
+Exact commands, expected results and settings for Caddy, Traefik and HAProxy:
+[`docs/runbook.md`](docs/runbook.md).
+
 ## Security
 
 The rules are decided in [ADR 0008](docs/adr/0008-security.md); this is the
@@ -664,7 +697,8 @@ tests/unit/             Unit tests without network access
 tests/integration/      Integration tests
 tests/fixtures/         Controlled fixtures
 eval/                   Ground-truth catalog and evaluation script
-docs/                   ADRs, tech debt, additional documentation
+docs/                   ADRs, runbook, tech debt, additional documentation
+Dockerfile              Container image; compose.yaml and Caddyfile start it locally
 .github/workflows/      CI
 ```
 
@@ -673,6 +707,7 @@ docs/                   ADRs, tech debt, additional documentation
 - Working rules: [`AGENTS.md`](AGENTS.md)
 - Architectural Decision Records: [`docs/adr/`](docs/adr/)
 - Tickets: [GitHub Issues](https://github.com/svenkroll/mcp-gemini-search/issues), template in [`.github/ISSUE_TEMPLATE/ticket.md`](.github/ISSUE_TEMPLATE/ticket.md)
+- Container, secrets, proxies and probes: [`docs/runbook.md`](docs/runbook.md)
 - Roadmap: [`docs/roadmap.md`](docs/roadmap.md)
 - Open tasks and deliberate debt: [`docs/techdebt.md`](docs/techdebt.md)
 - Changelog: [`CHANGELOG.md`](CHANGELOG.md)
