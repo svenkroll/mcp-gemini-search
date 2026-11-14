@@ -1,0 +1,170 @@
+name: release
+
+# Publishes the checked multi-arch image to GHCR for a version tag set by the
+# project owner (section "Release" of docs/adr/0011-container-and-ci.md).
+'on':
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  # The single place of the published image name.
+  IMAGE: ghcr.io/svenkroll/mcp-gemini-search
+
+jobs:
+  tag-check:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      version: ${{ steps.tag.outputs.version }}
+      revision: ${{ steps.tag.outputs.revision }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Check release tag
+        id: tag
+        env:
+          TAG: ${{ github.ref_name }}
+        run: scripts/ci/check-release-tag.sh "$TAG"
+
+  dockerfile-lint:
+    needs: tag-check
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Lint Dockerfile
+        run: scripts/ci/hadolint.sh
+
+  image-amd64:
+    needs: [tag-check, dockerfile-lint]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    outputs:
+      digest: ${{ steps.build.outputs.digest }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Log in to GHCR
+        env:
+          REGISTRY_USER: ${{ github.actor }}
+          REGISTRY_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: scripts/ci/registry-login.sh ghcr.io
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      - name: Build and push linux/amd64 image by digest
+        id: build
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          platforms: linux/amd64
+          outputs: type=image,name=${{ env.IMAGE }},push-by-digest=true,name-canonical=true,push=true
+          provenance: false
+          sbom: false
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.version=${{ needs.tag-check.outputs.version }}
+            org.opencontainers.image.revision=${{ needs.tag-check.outputs.revision }}
+          cache-from: type=gha,scope=container-linux-amd64
+
+      - name: Pull pushed digest
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          docker pull "$IMAGE@$DIGEST"
+          docker tag "$IMAGE@$DIGEST" gemini-search-mcp:release
+
+      - name: Scan image
+        run: scripts/ci/scan-image.sh gemini-search-mcp:release
+
+      - name: Smoke test image
+        run: scripts/ci/smoke-test.sh gemini-search-mcp:release
+
+  image-arm64:
+    needs: [tag-check, dockerfile-lint]
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 20
+    outputs:
+      digest: ${{ steps.build.outputs.digest }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Log in to GHCR
+        env:
+          REGISTRY_USER: ${{ github.actor }}
+          REGISTRY_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: scripts/ci/registry-login.sh ghcr.io
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      - name: Build and push linux/arm64 image by digest
+        id: build
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          platforms: linux/arm64
+          outputs: type=image,name=${{ env.IMAGE }},push-by-digest=true,name-canonical=true,push=true
+          provenance: false
+          sbom: false
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.version=${{ needs.tag-check.outputs.version }}
+            org.opencontainers.image.revision=${{ needs.tag-check.outputs.revision }}
+          cache-from: type=gha,scope=container-linux-arm64
+
+      - name: Pull pushed digest
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          docker pull "$IMAGE@$DIGEST"
+          docker tag "$IMAGE@$DIGEST" gemini-search-mcp:release
+
+      - name: Scan image
+        run: scripts/ci/scan-image.sh gemini-search-mcp:release
+
+      - name: Smoke test image
+        run: scripts/ci/smoke-test.sh gemini-search-mcp:release
+
+  publish:
+    needs: [tag-check, image-amd64, image-arm64]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Log in to GHCR
+        env:
+          REGISTRY_USER: ${{ github.actor }}
+          REGISTRY_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: scripts/ci/registry-login.sh ghcr.io
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      - name: Tag manifest list
+        env:
+          VERSION: ${{ needs.tag-check.outputs.version }}
+          REVISION: ${{ needs.tag-check.outputs.revision }}
+          AMD64_DIGEST: ${{ needs.image-amd64.outputs.digest }}
+          ARM64_DIGEST: ${{ needs.image-arm64.outputs.digest }}
+        run: >-
+          scripts/ci/publish-manifest.sh
+          "$IMAGE" "$VERSION" "$REVISION" "$AMD64_DIGEST" "$ARM64_DIGEST"
