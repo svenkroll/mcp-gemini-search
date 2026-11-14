@@ -1,12 +1,19 @@
 # Gemini Search MCP
 
-Gemini Search MCP is a personal, publicly reachable MCP server protected by a
-static bearer token. It provides the tool `search` and the optional tool `analyze_url`, backed by
-the Gemini Developer API. The yardstick is a correct, verifiable, and honest
-response for calling LLMs.
+Gemini Search MCP gives AI agents web search: an MCP server that answers a
+question with Google Search through Gemini and returns the answer together
+with its sources and the passages each source supports. It is a self-hosted
+alternative to search APIs such as Tavily or Serper and to the built-in web
+search of an agent, for anyone who wants to run search on their own Gemini API
+key.
 
-It runs over stdio for local clients and over stateless Streamable HTTP. A
-container image is not part of the project yet.
+It offers two tools: `search`, and the optional `analyze_url` for one question
+about one public URL. If Gemini did not search, the source list is empty; if a
+page lacks the answer, `analyze_url` says so.
+
+The server is built for personal use: one static bearer token, no user
+management. It runs over stdio for local clients and over stateless Streamable
+HTTP for remote ones. A container image is not part of the project yet.
 
 ## Contents
 
