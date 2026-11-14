@@ -19,22 +19,37 @@
 #      `server` service with the fake backend scripts/ci/proxy-stub/backend.py,
 #      run in its own digest-pinned Python image (never the server image), so
 #      no build, no .env file and no Gemini key are needed.
-#   2. Sends one POST /mcp through Caddy at http://127.0.0.1:8080 with the
-#      headers MCP-Protocol-Version: 2026-07-28, Mcp-Method: tools/call,
-#      Mcp-Name: search and a JSON-RPC tools/call body. The backend delays
-#      its final event by PROXY_TEST_DELAY_SECONDS, which the override file
-#      passes to it as PROXY_STUB_DELAY_SECONDS.
-#   3. Passes when the response has HTTP status 200, took at least
-#      PROXY_TEST_DELAY_SECONDS, contains the backend's final JSON-RPC result
-#      event, and that result reports all three headers with exactly the sent
-#      values.
+#   2. Sends two POST /mcp requests through Caddy at http://127.0.0.1:8080
+#      concurrently, both with the headers MCP-Protocol-Version: 2026-07-28,
+#      Mcp-Method: tools/call, Mcp-Name: search and a JSON-RPC tools/call
+#      body. The backend delays its answer by PROXY_TEST_DELAY_SECONDS, which
+#      the override file passes to it as PROXY_STUB_DELAY_SECONDS.
+#      - json request, Accept: application/json, text/event-stream. The
+#        backend sends no status and no header until the delay has passed,
+#        like the real server for this revision, so a short Caddy
+#        response_header_timeout or read_timeout cuts it off.
+#      - sse request, Accept: text/event-stream. The backend sends the
+#        status, the headers and ": waiting" at once and the final event
+#        after the delay, so a short Caddy read_timeout cuts it off.
+#   3. Passes when, for each request:
+#      - the HTTP status is 200,
+#      - the Content-Type is application/json (json) or text/event-stream
+#        (sse),
+#      - the request took at least PROXY_TEST_DELAY_SECONDS,
+#      - the body is the backend's JSON-RPC result (json) or contains its
+#        final "event: message" with that result (sse),
+#      - the result reports all three headers with exactly the sent values.
+#      The test must fail with exit code 1 when the Caddyfile sets
+#      response_header_timeout or read_timeout below
+#      PROXY_TEST_DELAY_SECONDS.
 #
 # Environment:
 #   PROXY_TEST_DELAY_SECONDS  Optional. Backend delay, default 75; must be
 #                             greater than 60.
 #
 # Output:
-#   stdout: "ok: <check>" or "fail: <check>" per check in step 3.
+#   stdout: "ok: <request>: <check>" or "fail: <request>: <check>" per check
+#   in step 3, <request> being json or sse.
 #   On failure the compose logs are printed to stderr.
 #   Side effects: starts the compose project gemini-search-mcp-proxy-test and
 #   always removes it with its volumes and networks on exit.

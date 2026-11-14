@@ -9,14 +9,31 @@ Contract:
 - Listens on ``0.0.0.0:8000`` (the port Caddy proxies to as ``server:8000``).
 - ``GET /health`` answers HTTP 200 with an empty body; used by the compose
   health check so ``docker compose up --wait`` returns once it serves.
-- ``POST /mcp`` reads the JSON-RPC request body and answers HTTP 200 with
-  ``Content-Type: text/event-stream``. It immediately sends and flushes the
-  SSE comment line ``: waiting``, then waits ``PROXY_STUB_DELAY_SECONDS``
-  seconds, then sends one event ``event: message`` whose ``data`` is the JSON
-  object ``{"jsonrpc": "2.0", "id": <request id>, "result":
+- ``POST /mcp`` reads the JSON-RPC request body and selects the response
+  mode from the ``Accept`` request header:
+
+  - JSON mode, the way the real server answers revision 2026-07-28 requests:
+    when ``Accept`` contains ``application/json`` (e.g. the client default
+    ``application/json, text/event-stream``). The stub first waits
+    ``PROXY_STUB_DELAY_SECONDS`` seconds without sending anything, not even
+    the status line or a header, then answers HTTP 200 with
+    ``Content-Type: application/json``, a ``Content-Length`` and the result
+    object below as the body. This exercises the proxy's response header
+    timeout and its read timeout.
+  - SSE mode: when ``Accept`` contains ``text/event-stream`` but not
+    ``application/json``. The stub answers HTTP 200 with
+    ``Content-Type: text/event-stream`` at once, immediately sends and
+    flushes the SSE comment line ``: waiting``, waits
+    ``PROXY_STUB_DELAY_SECONDS`` seconds, sends one event ``event: message``
+    whose ``data`` is the result object below, and closes the stream. This
+    exercises the proxy's read timeout on an open stream and its buffering.
+  - Any other ``Accept`` value answers HTTP 406 with an empty body.
+
+  The result object is ``{"jsonrpc": "2.0", "id": <request id>, "result":
   {"received_headers": {"MCP-Protocol-Version": ..., "Mcp-Method": ...,
   "Mcp-Name": ...}}}``. Each header value is exactly the value received, or
-  ``null`` when the header is missing. Then it closes the stream.
+  ``null`` when the header is missing. Concurrent requests are served in
+  parallel.
 - Any other method or path answers HTTP 404.
 
 Environment:
