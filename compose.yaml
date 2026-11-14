@@ -1,0 +1,45 @@
+# Local setup: the server behind Caddy (docs/runbook.md).
+# Configuration comes from the .env file next to this file (copy .env.example;
+# .env is never committed). Start with: docker compose up --build
+services:
+  server:
+    build: .
+    image: gemini-search-mcp:local
+    env_file: .env
+    # The image defaults, set again here: an empty MCP_TRANSPORT= or MCP_HOST=
+    # line copied from .env.example in .env would otherwise override them. The
+    # port is fixed because the health check and the Caddyfile use 8000.
+    environment:
+      MCP_TRANSPORT: http
+      MCP_HOST: 0.0.0.0
+      MCP_PORT: "8000"
+    read_only: true
+    restart: unless-stopped
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - import urllib.request; urllib.request.urlopen("http://127.0.0.1:8000/health/ready", timeout=3)
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  caddy:
+    # caddy 2.11.9-alpine
+    image: caddy:2.11.9-alpine@sha256:003a97808e781aa9f7e75cc2f43d34d461099031faf5e20faefb9f61126836f0
+    depends_on:
+      server:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:8080:8080"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    restart: unless-stopped
+
+volumes:
+  caddy_data:
+  caddy_config:

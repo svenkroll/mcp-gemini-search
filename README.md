@@ -13,7 +13,8 @@ page lacks the answer, `analyze_url` says so.
 
 The server is built for personal use: one static bearer token, no user
 management. It runs over stdio for local clients and over stateless Streamable
-HTTP for remote ones. A container image is not part of the project yet.
+HTTP for remote ones. A multi-architecture container image and a local Docker
+Compose setup with Caddy are in the repository; images are not published.
 
 > [!IMPORTANT]
 > **Running this server costs money, and it does not work with the Gemini free
@@ -40,7 +41,7 @@ HTTP for remote ones. A container image is not part of the project yet.
   - [When to use `analyze_url`](#when-to-use-analyze_url)
 - Operate
   - [Prerequisites](#prerequisites) and [Installation](#installation)
-  - [Running the server](#running-the-server): configuration, stdio, Streamable HTTP, timeouts, logging
+  - [Running the server](#running-the-server): configuration, stdio, Streamable HTTP, container, timeouts, logging
   - [Security](#security)
   - [Data protection](#data-protection)
   - [Costs](#costs): prices and what a call costs
@@ -514,6 +515,35 @@ openhands mcp add gemini-search --transport http \
   https://<your host>/mcp
 ```
 
+### Container
+
+The `Dockerfile` builds a multi-stage image for `linux/amd64` and
+`linux/arm64`. It contains no dev dependencies and no secrets, runs as the
+numeric non-root user `10001` and writes only to stdout and stderr. It starts
+with `MCP_TRANSPORT=http` and `MCP_HOST=0.0.0.0`. Images are not published;
+build your own.
+
+`compose.yaml` starts the server and Caddy locally. Secrets come from a local
+`.env` file that is never committed and never part of the image:
+
+```bash
+cp .env.example .env    # fill in GEMINI_API_KEY and MCP_BEARER_TOKEN
+docker compose up --build
+curl -i http://127.0.0.1:8080/health/ready
+```
+
+Caddy listens on `127.0.0.1:8080` and forwards `/mcp` to the server. The
+`Caddyfile` sets long read timeouts (330 seconds) and does not buffer the
+response, because a tool call answers with a server-sent-events stream that
+can stay silent for as long as `GEMINI_TIMEOUT_SECONDS` (at most 300). Any
+reverse proxy in front of the server needs the same two properties and must
+pass the headers `MCP-Protocol-Version`, `Mcp-Method` and `Mcp-Name` through
+unchanged ([ADR 0002](docs/adr/0002-mcp-framework-and-transport.md)).
+
+Exact commands, the settings for Traefik and HAProxy, Kubernetes health
+probes and how to run each CI check locally are in the
+[runbook](docs/runbook.md).
+
 ### Timeouts
 
 A tool call can take much longer than a normal HTTP request, so set the tool
@@ -653,6 +683,12 @@ Tooling: `uv`, Ruff, `ty`, pytest with coverage, pre-commit and GitHub Actions.
 | `make check` | `lint`, `typecheck`, `test` in that order |
 | `make pre-commit` | Run all pre-commit hooks across all files |
 
+The `container` job of CI builds and checks the image with the scripts under
+`scripts/ci/` ([ADR 0011](docs/adr/0011-container-and-ci.md)): Dockerfile lint,
+builds for both architectures, image scan, smoke test and a proxy test with the
+`Caddyfile`. Each script runs locally with Docker; see
+[Running the CI scripts locally](docs/runbook.md#running-the-ci-scripts-locally).
+
 The coverage threshold is 80% for `src/gemini_search_mcp/`. A run below the
 threshold causes `make test` to fail.
 
@@ -664,13 +700,18 @@ tests/unit/             Unit tests without network access
 tests/integration/      Integration tests
 tests/fixtures/         Controlled fixtures
 eval/                   Ground-truth catalog and evaluation script
-docs/                   ADRs, tech debt, additional documentation
+docs/                   ADRs, runbook, tech debt, additional documentation
+scripts/ci/             CI scripts called by the workflow
+Dockerfile              Container image
+compose.yaml            Local setup: server and Caddy
+Caddyfile               Local reverse proxy configuration
 .github/workflows/      CI
 ```
 
 ## Documentation
 
 - Working rules: [`AGENTS.md`](AGENTS.md)
+- Runbook (container, proxies, health probes, CI scripts): [`docs/runbook.md`](docs/runbook.md)
 - Architectural Decision Records: [`docs/adr/`](docs/adr/)
 - Tickets: [GitHub Issues](https://github.com/svenkroll/mcp-gemini-search/issues), template in [`.github/ISSUE_TEMPLATE/ticket.md`](.github/ISSUE_TEMPLATE/ticket.md)
 - Roadmap: [`docs/roadmap.md`](docs/roadmap.md)

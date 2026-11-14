@@ -35,5 +35,51 @@
 # Prerequisites: Docker; network access to download the Trivy database.
 set -euo pipefail
 
-echo "not implemented" >&2
-exit 1
+# aquasec/trivy 0.76.2
+readonly TRIVY_IMAGE="aquasec/trivy@sha256:8f6bb947dbc528902e11f2f5be52f7b519f6a39d5d148f41166f2040499768fb"
+
+[[ $# -eq 1 ]] || {
+  echo "usage: scripts/ci/scan-image.sh <image>" >&2
+  exit 2
+}
+image=$1
+
+docker info >/dev/null 2>&1 || {
+  echo "Docker is not available" >&2
+  exit 2
+}
+docker image inspect "$image" >/dev/null 2>&1 || {
+  echo "image not found locally: $image" >&2
+  exit 2
+}
+
+root=$(git -C "$(dirname "${BASH_SOURCE[0]}")" rev-parse --show-toplevel)
+
+work=$(mktemp -d)
+trap 'rm -rf "$work"' EXIT
+cache=${TRIVY_CACHE_DIR:-$work/cache}
+mkdir -p "$cache"
+
+# Trivy reads an image archive, so it needs neither the Docker socket nor a
+# registry; the scanned image is the one that was built.
+docker save --output "$work/image.tar" "$image"
+
+args=(
+  --quiet
+  --rm
+  --user "$(id -u):$(id -g)"
+  --volume "$work/image.tar:/image.tar:ro"
+  --volume "$cache:/cache"
+)
+trivy_args=(image --cache-dir /cache --input /image.tar --scanners vuln --no-progress --table-mode detailed)
+if [[ -f $root/.trivyignore ]]; then
+  args+=(--volume "$root/.trivyignore:/.trivyignore:ro")
+  trivy_args+=(--ignorefile /.trivyignore)
+fi
+
+# Report CRITICAL and HIGH findings without failing, then fail on CRITICAL
+# whether a fix exists or not.
+docker run "${args[@]}" "$TRIVY_IMAGE" "${trivy_args[@]}" \
+  --severity CRITICAL,HIGH --exit-code 0
+docker run "${args[@]}" "$TRIVY_IMAGE" "${trivy_args[@]}" \
+  --severity CRITICAL --exit-code 1 --skip-db-update --quiet

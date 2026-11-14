@@ -28,5 +28,25 @@
 # Prerequisites: Docker.
 set -euo pipefail
 
-echo "not implemented" >&2
-exit 1
+# hadolint/hadolint v2.15.1
+readonly HADOLINT_IMAGE="hadolint/hadolint@sha256:32dac94127fd60b7b7e3fbfc65e1383b9b5e25c9bfd7b8536de7a539fe68a12d"
+
+[[ $# -le 1 ]] || {
+  echo "usage: scripts/ci/hadolint.sh [<dockerfile>]" >&2
+  exit 2
+}
+
+root=$(git -C "$(dirname "${BASH_SOURCE[0]}")" rev-parse --show-toplevel)
+dockerfile="$root/${1:-Dockerfile}"
+[[ -f $dockerfile ]] || {
+  echo "Dockerfile not found: $dockerfile" >&2
+  exit 2
+}
+docker info >/dev/null 2>&1 || {
+  echo "Docker is not available" >&2
+  exit 2
+}
+
+# The Dockerfile arrives on stdin, so the container sees no repository file and
+# reads no repository Hadolint configuration.
+docker run --quiet --rm -i "$HADOLINT_IMAGE" hadolint --failure-threshold style - <"$dockerfile"

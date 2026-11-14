@@ -29,5 +29,30 @@
 # Prerequisites: Bash only.
 set -euo pipefail
 
-echo "not implemented" >&2
-exit 1
+[[ $# -ge 1 ]] || {
+  echo "usage: scripts/ci/require-success.sh <name>=<result> [<name>=<result> ...]" >&2
+  exit 2
+}
+
+for pair in "$@"; do
+  [[ $pair == *=* ]] || {
+    echo "argument without '=': $pair" >&2
+    exit 2
+  }
+done
+
+failed=()
+for pair in "$@"; do
+  name=${pair%%=*}
+  result=${pair#*=}
+  echo "$name: $result"
+  case $result in
+    success | skipped) ;;
+    *) failed+=("$name") ;;
+  esac
+done
+
+if [[ ${#failed[@]} -gt 0 ]]; then
+  echo "not successful: ${failed[*]}" >&2
+  exit 1
+fi

@@ -1,0 +1,21 @@
+# Keep secrets, local environments, caches and run artifacts out of the build
+# context (docs/adr/0011-container-and-ci.md). The Dockerfile copies only
+# pyproject.toml, uv.lock, README.md and src/.
+.git
+.github
+.env
+.env.*
+.venv
+__pycache__
+*.py[cod]
+.pytest_cache
+.ruff_cache
+.ty_cache
+.mypy_cache
+.coverage
+.coverage.*
+coverage.xml
+htmlcov
+eval/runs/
+.issue-drafts
+.claude

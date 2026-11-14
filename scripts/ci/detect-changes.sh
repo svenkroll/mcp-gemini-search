@@ -42,5 +42,72 @@
 # (actions/checkout with fetch-depth: 0 in CI).
 set -euo pipefail
 
-echo "not implemented" >&2
-exit 1
+readonly AMD64_PATHS=(Dockerfile .dockerignore pyproject.toml uv.lock src/)
+readonly ARM64_PATHS=(Dockerfile .dockerignore uv.lock)
+readonly PROXY_PATHS=(Caddyfile compose.yaml)
+
+usage() {
+  echo "usage: scripts/ci/detect-changes.sh <base-ref> [<head-ref>] | --all" >&2
+  exit 2
+}
+
+# touches <changed-paths-file> <entry>...: succeeds when a changed path equals
+# an entry or lies below a directory entry ending in "/".
+touches() {
+  local changed=$1 entry path
+  shift
+  for entry in "$@"; do
+    while IFS= read -r path; do
+      if [[ $entry == */ ]]; then
+        [[ $path == "$entry"* ]] && return 0
+      else
+        [[ $path == "$entry" ]] && return 0
+      fi
+    done <"$changed"
+  done
+  return 1
+}
+
+[[ $# -ge 1 && $# -le 2 ]] || usage
+
+build_amd64=false
+build_arm64=false
+proxy_test=false
+
+if [[ $1 == --all ]]; then
+  [[ $# -eq 1 ]] || usage
+  build_amd64=true
+  build_arm64=true
+  proxy_test=true
+else
+  [[ $1 != -* ]] || usage
+  base=$1
+  head=${2:-HEAD}
+  git rev-parse --verify --quiet "${base}^{commit}" >/dev/null || {
+    echo "unknown ref: $base" >&2
+    exit 2
+  }
+  git rev-parse --verify --quiet "${head}^{commit}" >/dev/null || {
+    echo "unknown ref: $head" >&2
+    exit 2
+  }
+  changed=$(mktemp)
+  trap 'rm -f "$changed"' EXIT
+  # --no-renames lists both sides of a rename, so a moved file still matches.
+  git diff --name-only --no-renames "${base}...${head}" -- >"$changed" || exit 2
+  if touches "$changed" "${AMD64_PATHS[@]}"; then build_amd64=true; fi
+  if touches "$changed" "${ARM64_PATHS[@]}"; then build_arm64=true; fi
+  if touches "$changed" "${PROXY_PATHS[@]}"; then proxy_test=true; fi
+fi
+
+printf '%s\n' "build_amd64=$build_amd64" "build_arm64=$build_arm64" "proxy_test=$proxy_test"
+if [[ -n ${GITHUB_OUTPUT:-} ]]; then
+  printf '%s\n' "build_amd64=$build_amd64" "build_arm64=$build_arm64" \
+    "proxy_test=$proxy_test" >>"$GITHUB_OUTPUT"
+fi
+
+if [[ $build_amd64 == false && $build_arm64 == false && $proxy_test == false ]]; then
+  echo "container: nothing to build" >&2
+else
+  echo "container: build_amd64=$build_amd64 build_arm64=$build_arm64 proxy_test=$proxy_test" >&2
+fi
