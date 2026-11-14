@@ -1,0 +1,25 @@
+# Local reverse proxy for the Gemini Search MCP server (docs/runbook.md).
+# Plain HTTP on port 8080 for local use; for a public host name, replace ":8080"
+# with the name and Caddy obtains a certificate itself.
+{
+	admin off
+}
+
+:8080 {
+	reverse_proxy server:8000 {
+		# Streamable HTTP answers with server-sent events: forward each chunk
+		# immediately and never buffer the response.
+		flush_interval -1
+
+		transport http {
+			dial_timeout 5s
+			# One Gemini call can take up to GEMINI_TIMEOUT_SECONDS (at most 300)
+			# plus the redirect resolution (ADR 0008); stay above that.
+			response_header_timeout 330s
+			read_timeout 330s
+		}
+
+		# MCP-Protocol-Version, Mcp-Method and Mcp-Name pass through unchanged:
+		# no header_up or header_down rule touches them.
+	}
+}

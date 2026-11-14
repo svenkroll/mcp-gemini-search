@@ -1,0 +1,26 @@
+# Override for scripts/ci/proxy-test.sh (docs/adr/0011-container-and-ci.md).
+# Used with -f compose.yaml: the repository Caddy service and Caddyfile stay
+# unchanged, and the `server` service becomes the fake backend in its own image,
+# so the proxy test needs no build, no .env file and no Gemini key.
+# Relative paths resolve against the directory of compose.yaml, the first file.
+services:
+  server:
+    # python 3.14-alpine
+    image: python:3.14-alpine@sha256:5862d971d1f0ae26b258cefa4e893556b1d3aba81bd2ff30888704ad378bab67
+    build: !reset null
+    env_file: !reset []
+    environment: !override
+      PROXY_STUB_DELAY_SECONDS: ${PROXY_TEST_DELAY_SECONDS:-75}
+    command: ["python", "/srv/backend.py"]
+    user: "10001:10001"
+    volumes:
+      - ./scripts/ci/proxy-stub/backend.py:/srv/backend.py:ro
+    healthcheck: !override
+      test:
+        - CMD
+        - python
+        - -c
+        - import urllib.request; urllib.request.urlopen("http://127.0.0.1:8000/health", timeout=3)
+      interval: 2s
+      timeout: 3s
+      retries: 15

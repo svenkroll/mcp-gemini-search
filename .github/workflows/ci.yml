@@ -44,3 +44,122 @@ jobs:
 
       - name: Test
         run: make test
+
+  # Container checks per ADR 0011. container-changes selects the steps from the
+  # changed paths; `container` is the single required check and also succeeds
+  # when nothing was selected.
+  container-changes:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      build_amd64: ${{ steps.all.outputs.build_amd64 || steps.diff.outputs.build_amd64 }}
+      build_arm64: ${{ steps.all.outputs.build_arm64 || steps.diff.outputs.build_arm64 }}
+      proxy_test: ${{ steps.all.outputs.proxy_test || steps.diff.outputs.proxy_test }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Select every container step on main
+        id: all
+        if: github.event_name == 'push'
+        run: scripts/ci/detect-changes.sh --all
+
+      - name: Detect changed container paths
+        id: diff
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: scripts/ci/detect-changes.sh "$BASE_SHA" HEAD
+
+  container-image-amd64:
+    needs: container-changes
+    if: needs.container-changes.outputs.build_amd64 == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Lint Dockerfile
+        run: scripts/ci/hadolint.sh
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      - name: Build linux/amd64 image
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          platforms: linux/amd64
+          push: false
+          load: true
+          tags: gemini-search-mcp:ci
+          cache-from: type=gha,scope=container-linux-amd64
+          cache-to: type=gha,mode=max,scope=container-linux-amd64
+
+      - name: Scan image
+        run: scripts/ci/scan-image.sh gemini-search-mcp:ci
+
+      - name: Smoke test image
+        run: scripts/ci/smoke-test.sh gemini-search-mcp:ci
+
+  container-image-arm64:
+    needs: container-changes
+    if: needs.container-changes.outputs.build_arm64 == 'true'
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      - name: Build linux/arm64 image
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          platforms: linux/arm64
+          push: false
+          cache-from: type=gha,scope=container-linux-arm64
+          cache-to: type=gha,mode=max,scope=container-linux-arm64
+
+  container-proxy:
+    needs: container-changes
+    if: needs.container-changes.outputs.proxy_test == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Proxy test through Caddy
+        run: scripts/ci/proxy-test.sh
+
+  container:
+    needs:
+      - container-changes
+      - container-image-amd64
+      - container-image-arm64
+      - container-proxy
+    if: always()
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Require container checks to pass
+        env:
+          CHANGES_RESULT: ${{ needs.container-changes.result }}
+          AMD64_RESULT: ${{ needs.container-image-amd64.result }}
+          ARM64_RESULT: ${{ needs.container-image-arm64.result }}
+          PROXY_RESULT: ${{ needs.container-proxy.result }}
+        run: >-
+          scripts/ci/require-success.sh
+          "container-changes=$CHANGES_RESULT"
+          "container-image-amd64=$AMD64_RESULT"
+          "container-image-arm64=$ARM64_RESULT"
+          "container-proxy=$PROXY_RESULT"

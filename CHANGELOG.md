@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- #11: Multi-stage `Dockerfile` (official `python:3.14-slim-trixie`, `uv`, no dev
+  dependencies, numeric non-root user `10001`), `.dockerignore`, `compose.yaml`
+  with the server and Caddy, and a `Caddyfile` with long read timeouts, no
+  response buffering and unchanged `MCP-Protocol-Version`, `Mcp-Method` and
+  `Mcp-Name` headers. The new `container` CI job runs Hadolint, builds for
+  `linux/amd64` and `linux/arm64`, scans the image with Trivy (fails on
+  CRITICAL), smoke-tests the image and tests a delayed response through Caddy,
+  following ADR 0011 with its logic in `scripts/ci/`. `docs/runbook.md`
+  describes secrets, the local start, proxy timeouts and header pass-through
+  for Caddy, Traefik and HAProxy, Kubernetes probes and local CI runs.
+  Changes under `scripts/ci/` or `.github/workflows/` run every container step
+  (ADR 0011).
+
 ### Fixed
 
 - #31: The loggers of the HTTP client libraries and the Google GenAI SDK are

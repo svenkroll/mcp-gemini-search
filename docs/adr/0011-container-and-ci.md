@@ -72,6 +72,7 @@ Any other action requires a change of this ADR.
 | linux/amd64 build, image scan, smoke test | `Dockerfile`, `.dockerignore`, `pyproject.toml`, `uv.lock`, `src/` |
 | linux/arm64 build, natively on `ubuntu-24.04-arm` | `Dockerfile`, `.dockerignore`, `uv.lock` |
 | proxy test | `Caddyfile`, `compose.yaml` |
+| every step above | `scripts/ci/` (including `scripts/ci/proxy-stub/`), `.github/workflows/` |
 
 - A push to `main` runs every step.
 - Without relevant changes the `container` job finishes successfully without
@@ -100,6 +101,8 @@ A full run of the `container` job on `main` with a warm cache takes at most
 - Good: Tickets for images and CI name what is built and reference this ADR;
   the rules no longer depend on how a ticket is worded.
 - Good: Every CI step can be reproduced locally with one command.
+- Good: A change to the CI scripts or workflows runs every container step in
+  its pull request, so a broken script or job fails before it reaches `main`.
 - Good: No emulation, one build per architecture and a shared cache keep the
   job short; documentation-only changes do not build at all.
 - Good: The image scan does not block pull requests on HIGH findings that
@@ -107,6 +110,8 @@ A full run of the `container` job on `main` with a warm cache takes at most
 - Bad: Two third-party actions from Docker are part of the supply chain.
 - Bad: An unfixed CRITICAL finding blocks every image change until the project
   owner adds an exception.
+- Bad: Every change under `scripts/ci/` or `.github/workflows/` runs the full
+  `container` job, including both builds, even when it touches a single script.
 - Bad: An arm64-only problem caused by a change under `src/` shows up only on
   `main`.
 
