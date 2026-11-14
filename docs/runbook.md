@@ -15,6 +15,9 @@ and `linux/arm64`:
 
 - Base image: the official `python:3.14-slim-trixie` image, pinned by digest.
   The `uv` binary is copied from the pinned `ghcr.io/astral-sh/uv` image.
+- The final stage installs the Debian security updates that are newer than the
+  pinned base image and removes `pip`, so a fixed vulnerability in the base
+  image does not fail the Trivy scan and the image has no package installer.
 - Only locked runtime dependencies are installed (`uv sync --locked --no-dev`).
   Dev tools, tests, docs and evaluation files are not part of the image.
 - The process runs as the non-root user `10001:10001`, writes only to stdout

@@ -27,8 +27,16 @@ RUN uv sync --locked --no-dev --no-editable
 
 FROM python:3.14-slim-trixie@sha256:9aaa474097d094040649f2162a627c0049b408f52138d980916788d80f04802f
 
-# Non-root user with a fixed numeric ID, so Kubernetes can verify runAsNonRoot.
-RUN groupadd --system --gid 10001 app \
+# Install the Debian security updates published after the pinned base image was
+# built, and remove pip: the server does not need it at run time, and its
+# vendored libraries would be scanned as part of the image. The non-root user
+# has a fixed numeric ID, so Kubernetes can verify runAsNonRoot.
+RUN apt-get update \
+    && apt-get upgrade --yes --no-install-recommends \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/* \
+    && python -m pip uninstall --yes pip \
+    && groupadd --system --gid 10001 app \
     && useradd --system --uid 10001 --gid app --no-create-home --home-dir /nonexistent \
         --shell /usr/sbin/nologin app
 
