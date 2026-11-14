@@ -25,6 +25,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- #37: The `search` description, the `analyze_url` description and the server
+  instructions tell the calling agent when to use each tool and how to phrase the
+  query: sources appear when the query asks for them, a confirmed fact is asked
+  for with the fact suffix, and `analyze_url` is for one specific piece of
+  information from a URL the agent already has, answering explicitly when the
+  content does not. Schemas and server behavior are unchanged. ADR 0003 and ADR
+  0004 document the texts.
 - #36: The evaluation measures `search` the way it is meant to be used. The
   catalog gains the outcome `answer_with_sources` (only for `search`) and 30
   variant cases: a `-sources` variant for each of the 26 plain `search`
