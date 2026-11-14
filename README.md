@@ -15,6 +15,21 @@ The server is built for personal use: one static bearer token, no user
 management. It runs over stdio for local clients and over stateless Streamable
 HTTP for remote ones. A container image is not part of the project yet.
 
+> [!IMPORTANT]
+> **Running this server costs money, and it does not work with the Gemini free
+> tier.** You need a Gemini API key of a project on the paid tier, that is with
+> billing enabled.
+>
+> - Every token is billed; the paid tier has no free token allowance.
+> - The first 5,000 Google Search queries per month are free, then 1,000
+>   queries cost 14 USD. Counted is each search query Gemini runs, not each
+>   `search` call; one call ran 2.3 queries on average in our runs.
+> - A `search` call cost about 0.25 US cents in tokens in our runs. Once the
+>   free queries are used up, the search fee adds about 3 US cents per call.
+>
+> Figures and examples: [Costs](#costs). Source of the prices, checked on
+> 2026-11-13: [Gemini API pricing](https://ai.google.dev/gemini-api/docs/pricing).
+
 ## Contents
 
 - Understand and use
@@ -28,7 +43,7 @@ HTTP for remote ones. A container image is not part of the project yet.
   - [Running the server](#running-the-server): configuration, stdio, Streamable HTTP, timeouts, logging
   - [Security](#security)
   - [Data protection](#data-protection)
-  - [Costs](#costs)
+  - [Costs](#costs): prices and what a call costs
 - Develop
   - [Development](#development)
   - [Documentation](#documentation)
@@ -375,6 +390,8 @@ decided per project. Decide once and put one of these rules into the project's
 - [uv](https://docs.astral.sh/uv/) (recommended: current version)
 - Python 3.14 — installed via `uv` by `make install`; a global installation is
   not required
+- A Gemini API key of a project on the paid tier; the free tier does not work,
+  see [Costs](#costs)
 
 ## Installation
 
@@ -573,8 +590,9 @@ The reasoning is recorded in
 
 ## Costs
 
-Operation runs on the paid tier of the Gemini Developer API, where every token
-is billed; there is no free token allowance. The prices below were checked on
+The server does not work with the Gemini free tier. It needs an API key of a
+project on the paid tier of the Gemini Developer API, where every token is
+billed; there is no free token allowance. The prices below were checked on
 2026-11-13 and are not updated automatically; the
 [Gemini API pricing page](https://ai.google.dev/gemini-api/docs/pricing) is
 authoritative.
@@ -585,11 +603,40 @@ authoritative.
 | `gemini-3.8-flash` output incl. thinking, per 1M tokens | 3.75 USD | 7.50 USD |
 | Google Search beyond 5,000 free requests per month, per 1,000 | 14 USD | 14 USD |
 
-- `search` is billed per search query the model executes, not per call; one
-  call can trigger several queries. At most 1,500 search requests per project
-  and day.
+- The 5,000 free requests are Google Search queries, and they are part of the
+  paid tier. Billed is each search query the model executes, not each `search`
+  call; one call can trigger several queries. At most 1,500 search requests
+  per project and day
+  ([rate limits and usage tiers](https://ai.google.dev/gemini-api/docs/rate-limits)).
 - `analyze_url` has no tool fee, but the retrieved page is billed as input
   tokens, so long pages and PDFs cost accordingly.
+
+### What a `search` call costs
+
+Measured over 28 recorded `search` calls of 2026-11-14 with queries that ask
+for sources (`eval/runs/2026-11-14-sources-verification/`), at the prices
+through 2026-12-31:
+
+| Per call | Average | Range |
+| --- | --- | --- |
+| input tokens | 250 | 142 to 601 |
+| output tokens incl. thinking | 609 | 223 to 1,531 |
+| search queries | 2.3 | 1 to 8 |
+| token cost | 0.25 US cents | up to 0.62 US cents |
+| search fee, once the free queries are used up | 3.2 US cents | 1.4 to 11.2 US cents |
+
+So the search fee, not the tokens, decides the bill. With 2.3 queries per call
+the 5,000 free queries last for about 2,200 `search` calls per month.
+
+| `search` calls per month | Search queries | Tokens | Search fee | Total |
+| --- | --- | --- | --- | --- |
+| 1,000 | 2,300, all free | 2.50 USD | 0 USD | about 2.50 USD |
+| 2,200 | 5,060, almost all free | 5.40 USD | 0.80 USD | about 6 USD |
+| 5,000 | 11,500, of which 6,500 billed | 12.40 USD | 91 USD | about 103 USD |
+
+From 2027-01-01 the token part doubles; the search fee stays the same. These
+are averages of a small sample; your queries may run more or fewer searches.
+There are no measured figures for `analyze_url` yet.
 
 Details, sources and open questions: [ADR 0006](docs/adr/0006-gemini-integration.md).
 
