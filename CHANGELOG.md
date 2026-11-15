@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- README: the overview now starts from the problem. It lists which sources of
+  web search are gone, which search services for agents exist and what they
+  return, and states who this server is for and who it is not for. A table
+  links each part of the implementation to its ADR. The cost notice at the top
+  is removed; the figures remain in the section "Costs".
+- Roadmap: new item for a backend on Gemini Enterprise Agent Platform
+  (formerly Vertex AI), with what is known and what to verify first.
+
 ## [0.1.0] - 2026-11-14
 
 ### Added

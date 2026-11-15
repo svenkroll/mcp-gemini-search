@@ -1,39 +1,158 @@
 # Gemini Search MCP
 
-Gemini Search MCP gives AI agents web search: an MCP server that answers a
-question with Google Search through Gemini and returns the answer together
-with its sources and the passages each source supports. It is a self-hosted
-alternative to search APIs such as Tavily or Serper and to the built-in web
-search of an agent, for anyone who wants to run search on their own Gemini API
-key.
+An MCP server that gives an agent web search through Google. It sends the
+agent's question to the Gemini API with Grounding with Google Search enabled
+and returns three things: Gemini's answer, the pages Gemini cited for it with
+their resolved URLs, and the search queries Gemini ran. An optional second
+tool, `analyze_url`, answers one question about one public URL.
 
-It offers two tools: `search`, and the optional `analyze_url` for one question
-about one public URL. If Gemini did not search, the source list is empty; if a
-page lacks the answer, `analyze_url` says so.
+It is a self-hosted, single-tenant service: stdio for local clients, stateless
+Streamable HTTP with a bearer token for remote ones, shipped as a
+multi-architecture container image. The repository also documents how the
+server was built: every decision is recorded in an ADR, the tool contracts are
+specified and tested, and the limits are measured and written down.
 
-The server is built for personal use: one static bearer token, no user
-management. It runs over stdio for local clients and over stateless Streamable
-HTTP for remote ones. A multi-architecture container image and a local Docker
-Compose setup with Caddy are in the repository; the project owner publishes
-released versions of the image to GHCR ([Release](#release)).
+## The problem
 
-> [!IMPORTANT]
-> **Running this server costs money, and it does not work with the Gemini free
-> tier.** You need a Gemini API key of a project on the paid tier, that is with
-> billing enabled.
->
-> - Every token is billed; the paid tier has no free token allowance.
-> - The first 5,000 Google Search queries per month are free, then 1,000
->   queries cost 14 USD. Counted is each search query Gemini runs, not each
->   `search` call; one call ran 2.3 queries on average in our runs.
-> - A `search` call cost about 0.25 US cents in tokens in our runs. Once the
->   free queries are used up, the search fee adds about 3 US cents per call.
->
-> Figures and examples: [Costs](#costs). Source of the prices, checked on
-> 2026-11-13: [Gemini API pricing](https://ai.google.dev/gemini-api/docs/pricing).
+An agent needs web search, and not every setup has one. Search that the model
+provider runs server-side exists only on that provider's own platform. It is
+missing, for example, when you run open-weight models in your own harness, or
+Claude through Amazon Bedrock, which does not support Anthropic's server-side
+tools such as web search. Then the search has to come from somewhere else.
+
+The classic sources are gone or closed, as of November 2026:
+
+| Source | Status |
+| --- | --- |
+| Google Custom Search JSON API | Closed to new customers since 2026-01-20, discontinued on 2027-01-01 ([Google](https://developers.google.com/custom-search/v1/overview)). The successor covers at most 50 domains; search over the whole web requires contacting Google. |
+| Bing Search API | Retired by Microsoft on 2025-08-11. |
+| Scraping Google, directly or through a SERP reseller | Google Search requires JavaScript since January 2025 and blocks automated access. Google sued the reseller SerpApi in December 2025 for circumventing these measures. |
+| SearXNG and other metasearch engines | Have no index of their own and query the engines above. The SearXNG project set its Google engine to inactive in July 2026 because it no longer worked. |
+
+What is available are search services built for agents. All of the following
+have an official API, and none of them is a Google search API. The
+descriptions are taken from the providers' own documentation; check there for
+the current state.
+
+| Service | Index | What it returns |
+| --- | --- | --- |
+| [Brave Search API](https://brave.com/search/api/) | Own independent index | Result lists, page content prepared for LLMs, and answers with citations |
+| [Tavily](https://tavily.com) | Not stated in the API documentation we checked | Results with cleaned page extracts, optionally an LLM-generated answer; also page extraction and crawling |
+| [Exa](https://exa.ai) | Own index with embedding-based search | Results with page contents, and answers with citations |
+| [Perplexity](https://docs.perplexity.ai) | Own index | Ranked results through the Search API; answers with citations through Sonar |
+| [Parallel](https://parallel.ai) | Own index | Ranked URLs with excerpts made for agents; also extraction and deep research |
+| [You.com](https://you.com/docs/quickstart) | Not stated in the API documentation we checked | Web and news results, page contents, and separate answer and research APIs; hosted MCP server |
+| [Linkup](https://docs.linkup.so) | Not stated in the API documentation we checked | One search endpoint with three output types: search results, a sourced answer, or structured JSON |
+| [Web Search on Amazon Bedrock AgentCore](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/gateway-target-connector-web-search-tool.html) | Index operated by Amazon | Ranked results with text extracts through an MCP gateway inside AWS; no answer |
+
+If one of these fits, use it. Several return what Gemini does not: the result
+list itself.
+
+The remaining way to search Google through an official API is Grounding with
+Google Search in the Gemini API. It works with an API key on the paid tier and
+returns Gemini's answer with citations, not a result list. This server makes
+it available to any MCP client.
+
+## What an agent gets
+
+One call to `search` returns ([contract](#search)):
+
+- `answer`: Gemini's answer text, unchanged.
+- `sources`: the pages Gemini cited, each with its real URL. Gemini returns
+  redirect URLs; the server resolves them, checks them and merges citations of
+  the same page. Each source lists the passages of the answer it supports.
+- `search_queries`: the Google searches Gemini actually ran.
+
+The agent can use the answer directly, or load the source URLs with its own
+fetch tool and work from the primary pages.
+
+What it does not get is the Google result list. Gemini does not hand over its
+search hits, only the answer and the citations
+([details](#what-the-server-gets-from-gemini-and-what-it-returns)).
+
+## Who it is for
+
+Teams and individuals who run their own agent setup, need web search in it,
+and want that search to be Google, obtained from Google directly. The reasons
+are usually these:
+
+- **The index.** Google's index is the largest and the one most people judge
+  search results by.
+- **Fewer vendors.** If you already use Gemini or Google Cloud, search comes
+  from a provider you already have a contract and billing with, instead of an
+  additional search vendor.
+- **Compliance.** Organizations that standardize on Google Cloud want search
+  under the same terms. Today this server uses the Gemini Developer API, which
+  offers no control over the processing region. A backend for Gemini
+  Enterprise Agent Platform (formerly Vertex AI) is on the
+  [roadmap](docs/roadmap.md#vertex-ai-backend) and not implemented yet.
+
+Typical setups:
+
+- open-weight models in a self-built or open-source harness;
+- models consumed through a platform without server-side web search;
+- several agents or clients that should share one search endpoint with one
+  API key, one log and fixed operating limits;
+- small or locally hosted models that cannot afford to fetch and read many
+  web pages and PDF documents themselves. Every fetched page fills the context
+  and costs time or money. Here Gemini does the reading and returns an answer
+  to the question, or with `analyze_url` an answer about one document. Whether
+  to trust that answer is for the agent to judge, but in our use it reduced
+  the number of follow-up requests. How much depends on the use case.
+
+It is a small audience. If the built-in web search of your agent or one of the
+services above works for you, you do not need this server.
+
+## Who it is not for
+
+- **Raw search results, rankings or SEO data.** See above.
+- **Data that has a structured API**, such as GitHub, PyPI or release
+  calendars. Query that API directly; it is exact.
+- **Multi-user operation.** There is one static bearer token and no user
+  management ([Security](#security)).
+- **Queries that must not leave your infrastructure.** Google retains queries
+  ([Data protection](#data-protection)).
+- **Use without costs.** The Gemini free tier does not work
+  ([Costs](#costs)).
+
+## Project status and limits of the results
+
+The project is at version 0.1.0 and new. Experience with it in daily use is
+still being collected, so expect the tool descriptions and the result format
+to change. What is already clear:
+
+- The answer is model output grounded in Google Search, not a search result.
+  It can differ between runs for the same question, and it can be incomplete
+  or wrong.
+- The sources tell the agent where to look. For facts that matter, the agent
+  should load the cited page and check the statement there.
+- How well it works depends on the question and on the calling model. It fits
+  questions whose answer is spread over the web; it does not replace a
+  structured API or reading a primary source.
+
+## How it is built
+
+| Aspect | Implementation | Decision |
+| --- | --- | --- |
+| Tool contracts | Input and output schemas, fixed tool descriptions, both covered by tests | [ADR 0003](docs/adr/0003-search-tool-contract.md), [ADR 0004](docs/adr/0004-analyze-url-tool-contract.md) |
+| Transport | stdio and stateless Streamable HTTP on one endpoint, health endpoints for Kubernetes | [ADR 0002](docs/adr/0002-mcp-framework-and-transport.md) |
+| Gemini integration | Asynchronous adapter for the Gemini Developer API with a total time budget per call, bounded concurrency and retries for 429 and transient 5xx | [ADR 0006](docs/adr/0006-gemini-integration.md) |
+| Provider boundary | The tools depend on an interface, not on Gemini; tests run offline against a fake provider | [ADR 0009](docs/adr/0009-provider-interface.md) |
+| Security | Bearer token, `Origin` check, URL policy for every accepted and returned URL; the server never loads third-party pages | [ADR 0008](docs/adr/0008-security.md) |
+| Errors and logging | Seven fixed error codes with a `request_id`; one JSON log line per call, without secrets, queries or web content | [ADR 0007](docs/adr/0007-error-handling-and-logging.md) |
+| Configuration | Environment variables only, validated at start; the process exits before opening a port when a rule is violated | [ADR 0010](docs/adr/0010-configuration.md) |
+| Container and CI | Multi-stage image for `linux/amd64` and `linux/arm64`, non-root, image scan, smoke test and reverse proxy test in CI; releases by version tag to GHCR | [ADR 0011](docs/adr/0011-container-and-ci.md) |
+| Quality gates | Ruff, `ty`, more than 450 tests without network access, coverage threshold 80%, dependencies pinned in `uv.lock` | [Development](#development) |
+| Evaluation | Ground-truth catalog and recorded runs against the live API | [ADR 0005](docs/adr/0005-ground-truth-and-evaluation.md) |
 
 ## Contents
 
+- Overview
+  - [The problem](#the-problem)
+  - [What an agent gets](#what-an-agent-gets)
+  - [Who it is for](#who-it-is-for) and [who it is not for](#who-it-is-not-for)
+  - [Project status and limits of the results](#project-status-and-limits-of-the-results)
+  - [How it is built](#how-it-is-built)
 - Understand and use
   - [Tools](#tools): inputs, outputs and errors of `search` and `analyze_url`
   - [How a search works](#how-a-search-works)
