@@ -136,6 +136,16 @@ WallClock = Callable[[], float]
 the evaluation of HTTP-date ``Retry-After`` values."""
 
 
+
+SEARCH_INSTRUCTION = (
+    "Prefer primary and official sources: standards bodies, authorities, project "
+    "or vendor websites, official repositories and release notes. Use secondary "
+    "sources only when no primary source covers a point, and say so in the answer. "
+    "Attribute a statement to a source only if that source states it. Mark your own "
+    "conclusions, estimates and expected dates as such, without a citation."
+)
+"""System instruction sent with every ``search`` call (work in progress)."""
+
 class InteractionsClient(Protocol):
     """System boundary to the asynchronous Gemini interactions API.
 
@@ -272,7 +282,7 @@ class GeminiProvider:
 
         Never logs the query or the API key.
         """
-        response = await self._send(query, [dict(_SEARCH_TOOL)], None)
+        response = await self._send(query, [dict(_SEARCH_TOOL)], SEARCH_INSTRUCTION)
         return SearchResult(
             answer=self._answer_text(response),
             citations=self._citations(response),

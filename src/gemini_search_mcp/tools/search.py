@@ -61,7 +61,10 @@ SEARCH_INPUT_SCHEMA: Mapping[str, Any] = MappingProxyType(
                 "type": "string",
                 "minLength": QUERY_MIN_LENGTH,
                 "description": (
-                    "Search query. Leading and trailing whitespace is removed; "
+                    "A complete question or instruction in natural language, as you would "
+                    "ask a colleague, not a list of search keywords. Gemini reads it as a "
+                    "prompt and decides itself which searches to run. "
+                    "Leading and trailing whitespace is removed; "
                     f"the rest must have {QUERY_MIN_LENGTH} to {QUERY_MAX_LENGTH} characters."
                 ),
             },
@@ -424,7 +427,10 @@ async def build_sources(
         source = sources.get(target)
         if source is None:
             sources[target] = Source(title=citation.title, url=target, evidence=[evidence])
-        else:
+        elif not any(
+            e.start_index == evidence.start_index and e.end_index == evidence.end_index
+            for e in source.evidence
+        ):
             source.evidence.append(evidence)
 
     return list(sources.values())[:max_sources]
