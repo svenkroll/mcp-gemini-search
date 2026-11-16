@@ -42,6 +42,10 @@ repository.
   `docker compose config --images`, never with a regular expression over YAML.
 - uv has one source: the `uv` stage of the `Dockerfile`. CI jobs that need uv
   export it with `scripts/ci/export-uv.sh`.
+- The Renovate image reference (tag and digest) has one source: the service
+  `renovate` in `scripts/ci/renovate/compose.yaml`. `scripts/ci/renovate-check.sh`
+  reads it with `docker compose config --images`, and Renovate itself detects and
+  updates it.
 
 ### Pinning
 
@@ -74,6 +78,7 @@ Any other action requires a change of this ADR.
 | linux/amd64 build, image scan, smoke test | `Dockerfile`, `.dockerignore`, `pyproject.toml`, `uv.lock`, `src/` |
 | linux/arm64 build, natively on `ubuntu-24.04-arm` | `Dockerfile`, `.dockerignore`, `uv.lock` |
 | proxy test | `Caddyfile`, `compose.yaml` |
+| Renovate configuration check (validator and extraction dry run in the pinned Renovate image) | `renovate.json` |
 | every step above | `scripts/ci/` (including `scripts/ci/proxy-stub/`), `.github/workflows/` |
 
 - A push to `main` runs every step.
@@ -157,6 +162,7 @@ A full run of the `container` job on `main` with a warm cache takes at most
   passed.
 - Good: uv has one source that a dependency update tool can maintain, and no
   checksum is maintained by hand.
+- Good: A change to `renovate.json` cannot break Renovate unnoticed.
 - Good: A release cannot publish a version that differs from
   `pyproject.toml` or a commit outside `main`.
 - Bad: The `check` job depends on Docker on the runner and pulls the uv image
@@ -169,6 +175,9 @@ A full run of the `container` job on `main` with a warm cache takes at most
   owner adds an exception.
 - Bad: Every change under `scripts/ci/` or `.github/workflows/` runs the full
   `container` job, including both builds, even when it touches a single script.
+- Bad: The Renovate image is pulled whenever `renovate.json` or the CI tooling
+  changes; the check covers validity and a clean run, not which dependencies
+  are detected (TD-008).
 - Bad: An arm64-only problem caused by a change under `src/` shows up only on
   `main`.
 

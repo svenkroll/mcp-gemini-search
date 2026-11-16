@@ -20,18 +20,22 @@
 #                (linux/amd64 build, Hadolint, image scan, smoke test)
 #   build_arm64  Dockerfile, .dockerignore, uv.lock
 #   proxy_test   Caddyfile, compose.yaml
-#   all three    scripts/ci/ (including scripts/ci/proxy-stub/), .github/workflows/
+#   renovate_check  renovate.json
+#   all four     scripts/ci/ (including scripts/ci/proxy-stub/ and
+#                scripts/ci/renovate/), .github/workflows/
 #                (the CI tooling itself; every step runs)
+#   With --all every value is true.
 #
 # Environment:
-#   GITHUB_OUTPUT  Optional. When set, the three key=value lines are also
+#   GITHUB_OUTPUT  Optional. When set, the four key=value lines are also
 #                  appended to this file (GitHub Actions step outputs).
 #
 # Output:
-#   stdout: exactly three lines in this order, each value "true" or "false":
+#   stdout: exactly four lines in this order, each value "true" or "false":
 #     build_amd64=<bool>
 #     build_arm64=<bool>
 #     proxy_test=<bool>
+#     renovate_check=<bool>
 #   stderr: one summary line; when every value is false it is exactly
 #     "container: nothing to build"
 #   No other side effects; the working tree and the index are not changed.
@@ -47,6 +51,7 @@ set -euo pipefail
 readonly AMD64_PATHS=(Dockerfile .dockerignore pyproject.toml uv.lock src/)
 readonly ARM64_PATHS=(Dockerfile .dockerignore uv.lock)
 readonly PROXY_PATHS=(Caddyfile compose.yaml)
+readonly RENOVATE_PATHS=(renovate.json)
 readonly CI_PATHS=(scripts/ci/ .github/workflows/)
 
 usage() {
@@ -77,12 +82,14 @@ touches() {
 build_amd64=false
 build_arm64=false
 proxy_test=false
+renovate_check=false
 
 if [[ $1 == --all ]]; then
   [[ $# -eq 1 ]] || usage
   build_amd64=true
   build_arm64=true
   proxy_test=true
+  renovate_check=true
 else
   [[ $1 != -* ]] || usage
   base=$1
@@ -105,20 +112,25 @@ else
     build_amd64=true
     build_arm64=true
     proxy_test=true
+    renovate_check=true
   fi
   if touches "$changed" "${AMD64_PATHS[@]}"; then build_amd64=true; fi
   if touches "$changed" "${ARM64_PATHS[@]}"; then build_arm64=true; fi
   if touches "$changed" "${PROXY_PATHS[@]}"; then proxy_test=true; fi
+  if touches "$changed" "${RENOVATE_PATHS[@]}"; then renovate_check=true; fi
 fi
 
-printf '%s\n' "build_amd64=$build_amd64" "build_arm64=$build_arm64" "proxy_test=$proxy_test"
+printf '%s\n' "build_amd64=$build_amd64" "build_arm64=$build_arm64" "proxy_test=$proxy_test" \
+  "renovate_check=$renovate_check"
 if [[ -n ${GITHUB_OUTPUT:-} ]]; then
   printf '%s\n' "build_amd64=$build_amd64" "build_arm64=$build_arm64" \
-    "proxy_test=$proxy_test" >>"$GITHUB_OUTPUT"
+    "proxy_test=$proxy_test" "renovate_check=$renovate_check" >>"$GITHUB_OUTPUT"
 fi
 
-if [[ $build_amd64 == false && $build_arm64 == false && $proxy_test == false ]]; then
+if [[ $build_amd64 == false && $build_arm64 == false && $proxy_test == false &&
+  $renovate_check == false ]]; then
   echo "container: nothing to build" >&2
 else
-  echo "container: build_amd64=$build_amd64 build_arm64=$build_arm64 proxy_test=$proxy_test" >&2
+  echo "container: build_amd64=$build_amd64 build_arm64=$build_arm64" \
+    "proxy_test=$proxy_test renovate_check=$renovate_check" >&2
 fi

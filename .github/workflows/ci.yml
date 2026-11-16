@@ -52,6 +52,7 @@ jobs:
       build_amd64: ${{ steps.all.outputs.build_amd64 || steps.diff.outputs.build_amd64 }}
       build_arm64: ${{ steps.all.outputs.build_arm64 || steps.diff.outputs.build_arm64 }}
       proxy_test: ${{ steps.all.outputs.proxy_test || steps.diff.outputs.proxy_test }}
+      renovate_check: ${{ steps.all.outputs.renovate_check || steps.diff.outputs.renovate_check }}
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -135,12 +136,25 @@ jobs:
       - name: Proxy test through Caddy
         run: scripts/ci/proxy-test.sh
 
+  renovate-config:
+    needs: container-changes
+    if: needs.container-changes.outputs.renovate_check == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Check Renovate configuration
+        run: scripts/ci/renovate-check.sh
+
   container:
     needs:
       - container-changes
       - container-image-amd64
       - container-image-arm64
       - container-proxy
+      - renovate-config
     if: always()
     runs-on: ubuntu-24.04
     timeout-minutes: 5
@@ -154,9 +168,11 @@ jobs:
           AMD64_RESULT: ${{ needs.container-image-amd64.result }}
           ARM64_RESULT: ${{ needs.container-image-arm64.result }}
           PROXY_RESULT: ${{ needs.container-proxy.result }}
+          RENOVATE_RESULT: ${{ needs.renovate-config.result }}
         run: >-
           scripts/ci/require-success.sh
           "container-changes=$CHANGES_RESULT"
           "container-image-amd64=$AMD64_RESULT"
           "container-image-arm64=$ARM64_RESULT"
           "container-proxy=$PROXY_RESULT"
+          "renovate-config=$RENOVATE_RESULT"

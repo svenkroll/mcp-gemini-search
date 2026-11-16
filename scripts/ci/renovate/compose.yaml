@@ -1,0 +1,7 @@
+# The single source of the Renovate image used by scripts/ci/renovate-check.sh
+# (docs/adr/0011-container-and-ci.md, section "Single source"). The script reads
+# the reference with `docker compose config --images`; Renovate updates it.
+# The service is never started by Compose.
+services:
+  renovate:
+    image: ghcr.io/renovatebot/renovate:44.242.0@sha256:0123dd7efea6978a8347732aac8be14745cebb6b8653e77bc9ee290698d97e89

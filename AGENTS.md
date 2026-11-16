@@ -138,10 +138,30 @@ contradicts the ADRs, the ADRs win.
   orchestrator commits.
 - One issue corresponds to one pull request against `main`, based on
   `.github/pull_request_template.md` with `Closes #<issue>` as the first line. Only the project
-  owner merges, preferably as a squash merge.
+  owner merges, preferably as a squash merge. Renovate pull requests are the exception,
+  see "Dependency Update Pull Requests".
 - No force push to a shared branch or a branch under review.
 - "Independent review" means a review by the `reviewer` role in its own session
   without access to the implementation reports, or by the project owner.
+
+## Dependency Update Pull Requests
+
+Renovate opens pull requests for version updates, major versions included. Renovate
+never merges. A dependency workflow analyses every raised version (release notes,
+usages, impact on the tools) and may squash-merge without the project owner when all
+of these hold:
+
+- an independent review approved the current head commit
+- no conflict with an ADR
+- observable behavior is unchanged and every affected code path is executed by a test
+- no test is added or removed; every test still ensures what it ensured before (a
+  changed library error message may be adjusted, a checked exception type or a value
+  fixed by an ADR may not)
+- no deprecation of an API, option or configuration this project uses
+- every check passed
+
+Otherwise the update becomes a ticket. Agents in the dependency workflow never change
+versions or lock files.
 
 ## Definition of Done
 
