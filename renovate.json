@@ -17,6 +17,12 @@
       "matchDatasources": ["docker"],
       "matchPackageNames": ["ghcr.io/**"],
       "minimumReleaseAgeBehaviour": "timestamp-optional"
+    },
+    {
+      "description": "Python runtime minor and major upgrades are a deliberate project decision, not a Renovate PR",
+      "matchDepNames": ["python"],
+      "matchUpdateTypes": ["minor", "major"],
+      "enabled": false
     }
   ]
 }
