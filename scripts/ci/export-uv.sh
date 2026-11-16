@@ -43,5 +43,22 @@
 # Prerequisites: Docker with Buildx, git.
 set -euo pipefail
 
-echo "not implemented" >&2
-exit 1
+[[ $# -eq 1 ]] || {
+  echo "usage: scripts/ci/export-uv.sh <dest-dir>" >&2
+  exit 2
+}
+dest=$1
+
+root=$(git -C "$(dirname "${BASH_SOURCE[0]}")" rev-parse --show-toplevel)
+
+docker buildx build --file "$root/Dockerfile" --target uv --output "type=local,dest=$dest" "$root" || {
+  echo "export of the uv stage failed" >&2
+  exit 1
+}
+
+for binary in uv uvx; do
+  [[ -f $dest/$binary ]] || {
+    echo "missing after export: $dest/$binary" >&2
+    exit 1
+  }
+done
