@@ -168,6 +168,9 @@ of these hold:
 Otherwise the update becomes a ticket. Agents in the dependency workflow never change
 versions or lock files.
 
+Renovate does not propose minor or major upgrades of the Python runtime. Changing the
+Python version touches files Renovate does not manage and is done as a ticket.
+
 ## Definition of Done
 
 An issue is done when all acceptance criteria are proven according to their
