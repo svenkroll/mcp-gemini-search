@@ -1,0 +1,22 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:recommended"],
+  "labels": ["dependencies"],
+  "automerge": false,
+  "minimumReleaseAge": "3 days",
+  "internalChecksFilter": "strict",
+  "pre-commit": { "enabled": true },
+  "lockFileMaintenance": {
+    "enabled": true,
+    "minimumReleaseAgeBehaviour": "timestamp-optional"
+  },
+  "packageRules": [
+    { "groupName": "ruff", "matchPackageNames": ["ruff", "astral-sh/ruff-pre-commit"] },
+    { "matchUpdateTypes": ["digest", "pin", "pinDigest"], "minimumReleaseAge": null },
+    {
+      "matchDatasources": ["docker"],
+      "matchPackageNames": ["ghcr.io/**"],
+      "minimumReleaseAgeBehaviour": "timestamp-optional"
+    }
+  ]
+}

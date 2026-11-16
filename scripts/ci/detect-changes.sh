@@ -51,6 +51,7 @@ set -euo pipefail
 readonly AMD64_PATHS=(Dockerfile .dockerignore pyproject.toml uv.lock src/)
 readonly ARM64_PATHS=(Dockerfile .dockerignore uv.lock)
 readonly PROXY_PATHS=(Caddyfile compose.yaml)
+readonly RENOVATE_PATHS=(renovate.json)
 readonly CI_PATHS=(scripts/ci/ .github/workflows/)
 
 usage() {
@@ -81,12 +82,14 @@ touches() {
 build_amd64=false
 build_arm64=false
 proxy_test=false
+renovate_check=false
 
 if [[ $1 == --all ]]; then
   [[ $# -eq 1 ]] || usage
   build_amd64=true
   build_arm64=true
   proxy_test=true
+  renovate_check=true
 else
   [[ $1 != -* ]] || usage
   base=$1
@@ -109,20 +112,25 @@ else
     build_amd64=true
     build_arm64=true
     proxy_test=true
+    renovate_check=true
   fi
   if touches "$changed" "${AMD64_PATHS[@]}"; then build_amd64=true; fi
   if touches "$changed" "${ARM64_PATHS[@]}"; then build_arm64=true; fi
   if touches "$changed" "${PROXY_PATHS[@]}"; then proxy_test=true; fi
+  if touches "$changed" "${RENOVATE_PATHS[@]}"; then renovate_check=true; fi
 fi
 
-printf '%s\n' "build_amd64=$build_amd64" "build_arm64=$build_arm64" "proxy_test=$proxy_test"
+printf '%s\n' "build_amd64=$build_amd64" "build_arm64=$build_arm64" "proxy_test=$proxy_test" \
+  "renovate_check=$renovate_check"
 if [[ -n ${GITHUB_OUTPUT:-} ]]; then
   printf '%s\n' "build_amd64=$build_amd64" "build_arm64=$build_arm64" \
-    "proxy_test=$proxy_test" >>"$GITHUB_OUTPUT"
+    "proxy_test=$proxy_test" "renovate_check=$renovate_check" >>"$GITHUB_OUTPUT"
 fi
 
-if [[ $build_amd64 == false && $build_arm64 == false && $proxy_test == false ]]; then
+if [[ $build_amd64 == false && $build_arm64 == false && $proxy_test == false &&
+  $renovate_check == false ]]; then
   echo "container: nothing to build" >&2
 else
-  echo "container: build_amd64=$build_amd64 build_arm64=$build_arm64 proxy_test=$proxy_test" >&2
+  echo "container: build_amd64=$build_amd64 build_arm64=$build_arm64" \
+    "proxy_test=$proxy_test renovate_check=$renovate_check" >&2
 fi

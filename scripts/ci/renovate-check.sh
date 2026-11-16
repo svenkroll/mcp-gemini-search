@@ -65,5 +65,44 @@
 # Prerequisites: Docker with Compose v2, git.
 set -euo pipefail
 
-echo "not implemented" >&2
-exit 1
+[[ $# -eq 0 ]] || {
+  echo "usage: scripts/ci/renovate-check.sh" >&2
+  exit 2
+}
+
+root=$(git -C "$(dirname "${BASH_SOURCE[0]}")" rev-parse --show-toplevel)
+
+[[ -f $root/renovate.json ]] || {
+  echo "renovate.json not found: $root/renovate.json" >&2
+  exit 1
+}
+
+image=$(docker compose --file "$root/scripts/ci/renovate/compose.yaml" config --images) || {
+  echo "reading the Renovate image failed" >&2
+  exit 1
+}
+if [[ -z $image || $image == *$'\n'* ]]; then
+  echo "reading the Renovate image failed: expected exactly one image reference" >&2
+  exit 1
+fi
+
+# renovate_run <command>...: runs a command in the Renovate image without
+# network, with the repository mounted read-only and no secret in the container.
+renovate_run() {
+  docker run --rm --network none \
+    --volume "$root:/repo:ro" --workdir /repo \
+    --env GIT_CONFIG_COUNT=1 \
+    --env GIT_CONFIG_KEY_0=safe.directory \
+    --env GIT_CONFIG_VALUE_0=/repo \
+    "$image" "$@"
+}
+
+renovate_run renovate-config-validator --strict renovate.json || {
+  echo "Renovate configuration validation failed" >&2
+  exit 1
+}
+
+renovate_run renovate --platform=local --dry-run=extract || {
+  echo "Renovate extraction failed" >&2
+  exit 1
+}
