@@ -747,6 +747,48 @@ def test_ac6_every_evidence_corresponds_to_exactly_one_kept_citation() -> None:
     assert len(delivered) == len(set(delivered))
 
 
+def test_ac5_two_citations_of_one_source_with_the_same_passage_give_one_evidence() -> None:
+    citations = [
+        _cite("https://example.com/a", "A", 0, 5),
+        _cite("https://example.com/a", "A", 6, 9),
+        _cite("https://example.com/a", "A", 0, 5),
+    ]
+
+    sources = _sources(citations, answer="0123456789")
+
+    assert len(sources) == 1
+    assert [(e.start_index, e.end_index) for e in sources[0].evidence] == [(0, 5), (6, 9)]
+    assert [e.text for e in sources[0].evidence] == ["01234", "678"]
+
+
+def test_ac5_same_passage_via_redirect_and_direct_url_of_one_target_gives_one_evidence() -> None:
+    redirect = _redirect("ok")
+    resolver = _FakeResolver({redirect: "https://example.com/r"})
+    citations = [
+        _cite("https://example.com/r", "R", 2, 4),
+        _cite(redirect, "R", 2, 4),
+    ]
+
+    sources = _sources(citations, answer="0123456789", resolver=resolver)
+
+    assert len(sources) == 1
+    assert [(e.start_index, e.end_index) for e in sources[0].evidence] == [(2, 4)]
+
+
+def test_ac6_ec1_different_sources_with_the_same_passage_each_keep_their_evidence() -> None:
+    citations = [
+        _cite("https://example.com/a", "A", 0, 5),
+        _cite("https://example.com/b", "B", 0, 5),
+        _cite("https://example.com/a", "A", 0, 5),
+    ]
+
+    sources = _sources(citations, answer="0123456789")
+
+    assert [s.url for s in sources] == ["https://example.com/a", "https://example.com/b"]
+    for source in sources:
+        assert [(e.start_index, e.end_index) for e in source.evidence] == [(0, 5)]
+
+
 def test_ac6_evidence_of_a_dropped_citation_is_never_delivered() -> None:
     citations = [
         _cite("https://example.com/a", "A", 0, 1),
