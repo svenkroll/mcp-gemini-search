@@ -8,7 +8,8 @@
 # python 3.14-slim-trixie
 ARG PYTHON_IMAGE=python:3.14-slim-trixie@sha256:9aaa474097d094040649f2162a627c0049b408f52138d980916788d80f04802f
 
-# ghcr.io/astral-sh/uv 0.13.7, keep in step with the uv version of the check job in ci.yml
+# The single source of uv: the builder stage copies it from here and the check job
+# exports it with scripts/ci/export-uv.sh.
 FROM ghcr.io/astral-sh/uv:0.13.7@sha256:96f40d3904aad8d0bd010539001d36c8e2188b981e1334471a90c4a1d93bb490 AS uv
 
 FROM ${PYTHON_IMAGE} AS builder

@@ -1,6 +1,6 @@
 ---
 status: proposed
-date: 2026-11-14
+date: 2026-11-16
 decision-makers: Sven Kroll
 ---
 
@@ -40,18 +40,15 @@ repository.
 - Every version, digest and checksum has exactly one source.
 - Values are read with the tool that owns the file, for example
   `docker compose config --images`, never with a regular expression over YAML.
-- Exception: uv appears twice, as an image pinned by digest in the
-  `Dockerfile` and as a tarball pinned by SHA-256 in the `check` job. They are
-  different artifacts with their own pins and carry the same version; the
-  `Dockerfile` comment names the other place. A dependency update tool may
-  keep them in sync later.
+- uv has one source: the `uv` stage of the `Dockerfile`. CI jobs that need uv
+  export it with `scripts/ci/export-uv.sh`.
 
 ### Pinning
 
 | What | Pinned by |
 | --- | --- |
 | GitHub Actions | 40-character commit SHA plus a version comment |
-| Downloaded binaries and installers, including uv | SHA-256 |
+| Downloaded binaries and installers | SHA-256 |
 | Container images | digest |
 
 ### Allowed actions
@@ -83,6 +80,9 @@ Any other action requires a change of this ADR.
 - Without relevant changes the `container` job finishes successfully without
   building, so it can remain a required check.
 - No emulation: arm64 is built on the native runner.
+- Exporting the `uv` stage with the local exporter
+  (`scripts/ci/export-uv.sh`) is not an image build and needs neither
+  `docker/build-push-action` nor a cache.
 
 ### Image scan
 
@@ -155,8 +155,12 @@ A full run of the `container` job on `main` with a warm cache takes at most
 - Good: The published image is exactly the digest that was scanned and
   smoke-tested on its own architecture; tags are set only after every check
   passed.
+- Good: uv has one source that a dependency update tool can maintain, and no
+  checksum is maintained by hand.
 - Good: A release cannot publish a version that differs from
   `pyproject.toml` or a commit outside `main`.
+- Bad: The `check` job depends on Docker on the runner and pulls the uv image
+  on every run.
 - Bad: Two third-party actions from Docker are part of the supply chain.
 - Bad: A failed release leaves untagged digests in GHCR that the project
   owner removes manually.
