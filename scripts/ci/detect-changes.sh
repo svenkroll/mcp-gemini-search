@@ -20,18 +20,22 @@
 #                (linux/amd64 build, Hadolint, image scan, smoke test)
 #   build_arm64  Dockerfile, .dockerignore, uv.lock
 #   proxy_test   Caddyfile, compose.yaml
-#   all three    scripts/ci/ (including scripts/ci/proxy-stub/), .github/workflows/
+#   renovate_check  renovate.json
+#   all four     scripts/ci/ (including scripts/ci/proxy-stub/ and
+#                scripts/ci/renovate/), .github/workflows/
 #                (the CI tooling itself; every step runs)
+#   With --all every value is true.
 #
 # Environment:
-#   GITHUB_OUTPUT  Optional. When set, the three key=value lines are also
+#   GITHUB_OUTPUT  Optional. When set, the four key=value lines are also
 #                  appended to this file (GitHub Actions step outputs).
 #
 # Output:
-#   stdout: exactly three lines in this order, each value "true" or "false":
+#   stdout: exactly four lines in this order, each value "true" or "false":
 #     build_amd64=<bool>
 #     build_arm64=<bool>
 #     proxy_test=<bool>
+#     renovate_check=<bool>
 #   stderr: one summary line; when every value is false it is exactly
 #     "container: nothing to build"
 #   No other side effects; the working tree and the index are not changed.
