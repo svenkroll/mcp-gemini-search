@@ -72,6 +72,7 @@ def test_non_ascii_path_under_src_selects_amd64_build(tmp_path: Path) -> None:
         "build_amd64=true",
         "build_arm64=false",
         "proxy_test=false",
+        "renovate_check=false",
     ]
     assert "nothing to build" not in result.stderr
 
@@ -86,6 +87,7 @@ def test_ec4_unrelated_change_selects_nothing(tmp_path: Path) -> None:
         "build_amd64=false",
         "build_arm64=false",
         "proxy_test=false",
+        "renovate_check=false",
     ]
     assert result.stderr.strip() == "container: nothing to build"
 
@@ -108,4 +110,5 @@ def test_ci_tooling_change_selects_every_container_step(tmp_path: Path, changed:
         "build_amd64=true",
         "build_arm64=true",
         "proxy_test=true",
+        "renovate_check=true",
     ]
