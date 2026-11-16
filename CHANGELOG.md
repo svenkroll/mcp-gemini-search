@@ -9,6 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- #55: `search` guides callers to full questions: the tool description starts
+  with the rule to ask a full question in natural language, with one
+  counter-example, and the `query` parameter description says the same. Every
+  `search` call now sends a system instruction that asks Gemini to prefer
+  primary and official sources, to attribute a statement to a source only if
+  that source states it and to mark its own conclusions without a citation.
+  A source lists each passage (same `start_index` and `end_index`) only once;
+  different sources keep their own entries. `analyze_url` is unchanged. ADR
+  0003 and ADR 0006 document the texts.
+
 - README: the overview now starts from the problem. It lists which sources of
   web search are gone, which search services for agents exist and what they
   return, and states who this server is for and who it is not for. A table

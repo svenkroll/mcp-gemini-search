@@ -29,6 +29,12 @@ missing grounding metadata or discarding useful partial results.
 | `query` | string | trimmed; then 1 to 4,000 Unicode characters |
 | `max_sources` | integer | optional, 1 to 10, default 5 |
 
+The schema description of `query` (`SEARCH_INPUT_SCHEMA` in
+`src/gemini_search_mcp/tools/search.py`) starts with: "A complete question or
+instruction in natural language, as you would ask a colleague, not a list of
+search keywords. Gemini reads it as a prompt and decides itself which searches
+to run." The sentence on whitespace trimming and the length limits follows it.
+
 ### Output (`structuredContent`)
 
 ```json
@@ -51,7 +57,10 @@ missing grounding metadata or discarding useful partial results.
 - `sources`: at most one source per target URL, ordered by first citation in
   `answer`, truncated to `max_sources`. `title` is the title Gemini returned,
   otherwise an empty string.
-- `evidence`: all citations of this source. `start_index` and `end_index` are
+- `evidence`: all citations of this source, except that a citation with the
+  same `start_index` and `end_index` as an earlier entry of the same source is
+  not listed again; the first entry is kept. Different sources that support the
+  same passage each keep their own entry. `start_index` and `end_index` are
   taken unchanged from Gemini; the server never computes positions. `text` is
   the slice of `answer` between these indices. The index unit is UTF-8 bytes,
   not characters: a live check on 2026-11-13 (Gemini API `v1`, German answer
@@ -96,8 +105,12 @@ together with their evidence. Sources are then merged by target URL.
 The `search` description is a constant in `src/gemini_search_mcp/server.py`
 (`SEARCH_DESCRIPTION`). It states, in this order:
 
-1. S1: the tool searches the web with Google Search grounding through Gemini
-   and returns an answer with its sources.
+1. S1: the caller asks Gemini a full question in natural language, not search
+   keywords, and states what the answer must contain. Gemini searches the web
+   with Google Search grounding and returns an answer with its sources. One
+   counter-example follows: instead of "python zugferd library github" ask
+   "Which maintained open-source Python libraries generate or validate ZUGFeRD
+   invoices? Link each repository."
 2. S2: Gemini decides on its own whether to search; a plain question may be
    answered from model knowledge, then sources, evidence and search queries
    are empty and the call still succeeds.
@@ -121,10 +134,14 @@ for 11 of 26 plain questions and returned no sources; the earlier description
 did not tell the caller that sources depend on the query. Manual probes on
 2026-11-14 showed that asking for an authoritative source and a link made Gemini
 search, and that the fact suffix produced "not publicly known" for a figure that
-does not exist. The description must not claim that every answer is grounded,
-must not promise a number of sources and must not use evaluation terms. This
-changes texts only; the Gemini request, the schemas and the behavior stay as
-decided above.
+does not exist. Manual runs on 2026-11-15 with Qwen 3.8 27B and DeepSeek V4.1
+Flash in OpenCode showed that calling agents send search keywords unless the
+description and the `query` description tell them to write a question; S1
+and the `query` description are worded for that. The description must not claim that every answer is grounded,
+must not promise a number of sources and must not use evaluation terms. The texts change
+the schema description of `query` only, not the schema itself. The Gemini
+request gains the system instruction from ADR 0006; the evidence rule above
+is the only change in the output.
 
 ## Consequences
 

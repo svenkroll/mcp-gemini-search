@@ -183,8 +183,17 @@ of the result is the same object as JSON.
 
 ### `search`
 
-Searches the web with Google Search grounding through Gemini and returns an
-answer with its sources ([ADR 0003](docs/adr/0003-search-tool-contract.md)).
+Asks Gemini a full question in natural language; Gemini searches the web with
+Google Search grounding and returns an answer with its sources
+([ADR 0003](docs/adr/0003-search-tool-contract.md)). Send a question that states
+what the answer must contain, not search keywords: instead of
+`python zugferd library github` ask `Which maintained open-source Python
+libraries generate or validate ZUGFeRD invoices? Link each repository.` Gemini
+reads the query as a prompt and decides itself which searches to run. Every
+`search` call also sends a fixed system instruction that asks Gemini to prefer
+primary and official sources and to attribute a statement to a source only if
+that source states it
+([ADR 0006](docs/adr/0006-gemini-integration.md)).
 
 Input:
 
@@ -201,7 +210,7 @@ Output:
 | `sources` | array | at most one entry per target URL, ordered by first citation in `answer`, truncated to `max_sources` |
 | `sources[].title` | string | the title Gemini returned, otherwise an empty string |
 | `sources[].url` | string | the target URL; grounding redirects are already resolved |
-| `sources[].evidence` | array | every passage of `answer` this source supports |
+| `sources[].evidence` | array | every passage of `answer` this source supports, each passage (same `start_index` and `end_index`) once per source |
 | `sources[].evidence[].text` | string | the slice of `answer` between the two indices |
 | `sources[].evidence[].start_index`, `end_index` | integer | offsets into `answer` in UTF-8 bytes, not characters, taken unchanged from Gemini |
 | `search_queries` | array of strings | the search queries Gemini actually executed |
@@ -343,7 +352,10 @@ From a citation to a source ([ADR 0003](docs/adr/0003-search-tool-contract.md)):
   The server resolves each one to its target URL. A source that fails the URL
   check or cannot be resolved is dropped together with its evidence.
 - Citations with the same target URL are merged into one source; each citation
-  becomes one `evidence` entry. `evidence[].text` is the slice of `answer`
+  becomes one `evidence` entry, except that a citation with the same
+  `start_index` and `end_index` as an earlier entry of that source is not
+  listed again. Different sources that support the same passage each keep
+  their entry. `evidence[].text` is the slice of `answer`
   between `start_index` and `end_index`, taken from the UTF-8 bytes.
 - `title` is passed on as Gemini returned it. In the responses checked it was
   the domain of the page, not the page title.
@@ -430,8 +442,10 @@ Without the sentence the answer may be an estimate, labeled as such. With it
 the answer is that the figure is not publicly known.
 
 The server passes the query to Gemini unchanged and adds nothing to it, so the
-wording is up to the caller. The `search` tool description tells calling agents
-the same.
+wording is up to the caller. Write each of these as a full question in natural
+language, not as search keywords. The `search` tool description tells calling
+agents the same. The only addition to the request is the fixed system
+instruction described under [`search`](#search).
 
 ## When to use `analyze_url`
 
