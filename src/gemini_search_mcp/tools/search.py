@@ -61,7 +61,10 @@ SEARCH_INPUT_SCHEMA: Mapping[str, Any] = MappingProxyType(
                 "type": "string",
                 "minLength": QUERY_MIN_LENGTH,
                 "description": (
-                    "Search query. Leading and trailing whitespace is removed; "
+                    "A complete question or instruction in natural language, as you would "
+                    "ask a colleague, not a list of search keywords. Gemini reads it as a "
+                    "prompt and decides itself which searches to run. "
+                    "Leading and trailing whitespace is removed; "
                     f"the rest must have {QUERY_MIN_LENGTH} to {QUERY_MAX_LENGTH} characters."
                 ),
             },
@@ -385,13 +388,17 @@ async def build_sources(
        delivers them in order of appearance in the answer). Sources are
        ordered by the position of their first kept citation; a source's
        ``title`` is that citation's title (``""`` if it has none); its
-       evidence lists all its kept citations in citation order, one
-       :class:`Evidence` per citation via :func:`evidence_text`.
+       evidence lists its kept citations in citation order, one
+       :class:`Evidence` per citation via :func:`evidence_text`; a citation
+       with the same ``start_index`` and ``end_index`` as an earlier entry of
+       the same source adds none (the first is kept; other sources are not
+       affected).
     6. Truncate to the first ``max_sources`` sources.
 
     Postconditions: every evidence entry corresponds to exactly one input
-    citation; a dropped citation contributes no evidence; target URLs are
-    unique; ``len(result) <= max_sources``.
+    citation; no source has two entries with the same offsets; a dropped
+    citation contributes no evidence; target URLs are unique;
+    ``len(result) <= max_sources``.
     """
     checked: list[tuple[Citation, str]] = []
     for citation in citations:
@@ -424,7 +431,10 @@ async def build_sources(
         source = sources.get(target)
         if source is None:
             sources[target] = Source(title=citation.title, url=target, evidence=[evidence])
-        else:
+        elif not any(
+            e.start_index == evidence.start_index and e.end_index == evidence.end_index
+            for e in source.evidence
+        ):
             source.evidence.append(evidence)
 
     return list(sources.values())[:max_sources]

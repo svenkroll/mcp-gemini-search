@@ -62,6 +62,21 @@ the adapter needs none of the stateful features it would also disable
 (`previous_interaction_id`, background execution), so the decision is about
 debugging versus retention only.
 
+Every `search` call sends a fixed English system instruction
+(`SEARCH_INSTRUCTION` in `src/gemini_search_mcp/gemini_client.py`), word for
+word:
+
+> Prefer primary and official sources: standards bodies, authorities, project or
+> vendor websites, official repositories and release notes. Use secondary
+> sources only when no primary source covers a point, and say so in the answer.
+> Attribute a statement to a source only if that source states it. Mark your own
+> conclusions, estimates and expected dates as such, without a citation.
+
+Reason: in manual runs on 2026-11-15 Gemini preferred secondary sources and
+attributed its own conclusions to a source. The instruction does not change the
+query, which is still passed on unchanged, and `analyze_url` keeps its own
+system instruction instead of this one.
+
 ### Verified facts (as of 2026-11-09)
 
 - `gemini-3.8-flash` is the stable model identifier, published on 2026-09-02,

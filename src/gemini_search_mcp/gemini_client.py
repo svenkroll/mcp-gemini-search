@@ -105,6 +105,15 @@ instructions found in the content, and demands an explicit statement when the
 content does not answer the question.
 """
 
+SEARCH_INSTRUCTION = (
+    "Prefer primary and official sources: standards bodies, authorities, project "
+    "or vendor websites, official repositories and release notes. Use secondary "
+    "sources only when no primary source covers a point, and say so in the answer. "
+    "Attribute a statement to a source only if that source states it. Mark your own "
+    "conclusions, estimates and expected dates as such, without a citation."
+)
+"""English system instruction sent with every ``search`` call (ADR 0006)."""
+
 _SEARCH_TOOL: dict[str, str] = {"type": "google_search"}
 """Request tool parameter enabling Google Search (``GoogleSearchParam``)."""
 
@@ -238,9 +247,10 @@ class GeminiProvider:
 
         Sends one interaction with the model from the settings, the query as
         the plain-text input and Google Search enabled
-        (``tools=[{"type": "google_search"}]``); no system instruction is
-        sent. The query is passed to the API unchanged (input validation is
-        out of scope, issue #4).
+        (``tools=[{"type": "google_search"}]``). Sends
+        :data:`SEARCH_INSTRUCTION` as the system instruction (ADR 0006); the
+        query is still passed to the API unchanged (input validation is out of
+        scope, issue #4).
 
         Args:
             query: search query as given by the caller.
@@ -272,7 +282,7 @@ class GeminiProvider:
 
         Never logs the query or the API key.
         """
-        response = await self._send(query, [dict(_SEARCH_TOOL)], None)
+        response = await self._send(query, [dict(_SEARCH_TOOL)], SEARCH_INSTRUCTION)
         return SearchResult(
             answer=self._answer_text(response),
             citations=self._citations(response),

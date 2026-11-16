@@ -25,7 +25,7 @@ from google.genai import interactions
 from google.genai._gaos.lib.compat_errors import APIStatusError
 
 from gemini_search_mcp.config import Settings
-from gemini_search_mcp.gemini_client import GeminiProvider
+from gemini_search_mcp.gemini_client import SEARCH_INSTRUCTION, GeminiProvider
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 PROBE_PATH = REPO_ROOT / "eval" / "probe_citation_offsets.py"
@@ -301,7 +301,7 @@ def test_ac2_request_parameters_equal_those_of_gemini_provider_search(tmp_path: 
     assert probe_fake.calls[0]["model"] == FAKE_MODEL
     assert probe_fake.calls[0]["input"] == query
     assert probe_fake.calls[0]["tools"] == [{"type": "google_search"}]
-    assert probe_fake.calls[0]["system_instruction"] is None
+    assert probe_fake.calls[0]["system_instruction"] == SEARCH_INSTRUCTION
 
 
 # --- AC3: no content in output ----------------------------------------------

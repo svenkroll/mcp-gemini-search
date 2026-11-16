@@ -81,8 +81,8 @@ def _description(name: str) -> str:
     ("fact", "patterns"),
     [
         (
-            "S1 searches with Google Search grounding through Gemini, answer with sources",
-            [r"google search grounding", r"through gemini", r"answer with its sources"],
+            "S1 Gemini searches the web with Google Search grounding, answer with sources",
+            [r"google search grounding", r"searches the web", r"answer with its sources"],
         ),
         (
             "S2 Gemini decides on its own; plain question may be answered from model knowledge, "
@@ -114,6 +114,19 @@ def test_ac1_search_description_states_required_fact(fact: str, patterns: list[s
 
     for pattern in patterns:
         assert re.search(pattern, description), f"missing fact: {fact} ({pattern})"
+
+
+SEARCH_DESCRIPTION_START = (
+    "Ask Gemini a full question in natural language; Gemini searches the web with Google "
+    "Search grounding and returns an answer with its sources. Do not send search keywords: "
+    "write the question and state what the answer must contain. Example: instead of "
+    '"python zugferd library github" ask "Which maintained open-source Python libraries '
+    'generate or validate ZUGFeRD invoices? Link each repository."'
+)
+
+
+def test_ac1_search_description_starts_with_the_full_question_rule_and_counter_example() -> None:
+    assert _description("search").startswith(SEARCH_DESCRIPTION_START)
 
 
 # AC2: analyze_url description (issue #37, A1 to A3); the facts of ADR 0004 stay covered by
@@ -202,8 +215,10 @@ SEARCH_INPUT = {
         },
         "query": {
             "description": (
-                "Search query. Leading and trailing whitespace is removed; the rest must "
-                "have 1 to 4000 characters."
+                "A complete question or instruction in natural language, as you would ask a "
+                "colleague, not a list of search keywords. Gemini reads it as a prompt and "
+                "decides itself which searches to run. Leading and trailing whitespace is "
+                "removed; the rest must have 1 to 4000 characters."
             ),
             "minLength": 1,
             "type": "string",

@@ -136,8 +136,13 @@ SEARCH_TITLE = "Web Search"
 """``title`` of the ``search`` tool (ADR 0002)."""
 
 SEARCH_DESCRIPTION = (
-    "Search the web with Google Search grounding through Gemini and return an answer "
-    "with its sources. Gemini decides on its own whether to run a search: a plain "
+    "Ask Gemini a full question in natural language; Gemini searches the web with "
+    "Google Search grounding and returns an answer with its sources. Do not send "
+    "search keywords: write the question and state what the answer must contain. "
+    'Example: instead of "python zugferd library github" ask "Which maintained '
+    "open-source Python libraries generate or validate ZUGFeRD invoices? Link each "
+    'repository." '
+    "Gemini decides on its own whether to run a search: a plain "
     "question may be answered from model knowledge, and then sources, evidence and "
     "search queries are empty while the call still succeeds. If you need verifiable "
     "sources, ask for them in the query: ask to look the answer up and cite the page "

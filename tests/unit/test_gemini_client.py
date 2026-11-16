@@ -29,6 +29,7 @@ from google.genai.errors import ContinuationInterruptedError
 from gemini_search_mcp.config import Settings
 from gemini_search_mcp.gemini_client import (
     GEMINI_API_VERSION,
+    SEARCH_INSTRUCTION,
     URL_CONTEXT_INSTRUCTION,
     GeminiProvider,
 )
@@ -559,6 +560,42 @@ def test_ac10_every_analyze_url_call_carries_the_injection_instruction() -> None
         assert {"type": "url_context"} in call["tools"]
         assert "https://example.com/page" in call["input"]
         assert "What does it say?" in call["input"]
+
+
+SEARCH_INSTRUCTION_TEXT = (
+    "Prefer primary and official sources: standards bodies, authorities, project "
+    "or vendor websites, official repositories and release notes. Use secondary "
+    "sources only when no primary source covers a point, and say so in the answer. "
+    "Attribute a statement to a source only if that source states it. Mark your own "
+    "conclusions, estimates and expected dates as such, without a citation."
+)
+
+
+def test_ac3_every_search_call_sends_the_search_instruction_as_system_instruction() -> None:
+    """AC3: every search call, including a retry, sends the R3 text as system instruction."""
+    response = _load_fixture("search_full.json")
+    provider, fake = _provider([_api_error(429), response, response])
+
+    asyncio.run(provider.search("distinctive query"))
+    asyncio.run(provider.search("distinctive query"))
+
+    assert SEARCH_INSTRUCTION == SEARCH_INSTRUCTION_TEXT
+    assert len(fake.calls) == 3
+    for call in fake.calls:
+        assert call["system_instruction"] == SEARCH_INSTRUCTION_TEXT
+        assert {"type": "google_search"} in call["tools"]
+
+
+def test_ac4_analyze_url_sends_the_url_context_instruction_and_not_the_search_instruction() -> None:
+    """AC4: analyze_url keeps URL_CONTEXT_INSTRUCTION and never carries the search text."""
+    response = _load_fixture("url_context_statuses.json")
+    provider, fake = _provider([response])
+
+    asyncio.run(provider.analyze_url("https://example.com/page", "What does it say?"))
+
+    instruction = fake.calls[0]["system_instruction"]
+    assert instruction == URL_CONTEXT_INSTRUCTION
+    assert SEARCH_INSTRUCTION_TEXT not in instruction
 
 
 def test_ec4_zero_retries_makes_exactly_one_attempt() -> None:

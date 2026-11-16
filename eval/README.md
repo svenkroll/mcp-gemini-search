@@ -422,8 +422,8 @@ answers is untrusted, so check a run before sharing or committing it.
 `end_index` of `url_citation` annotations (UTF-8 bytes, ADR 0003) are relative
 to the whole answer or to their own text block. The result decides the offset
 base for #20. The script sends search requests exactly as `GeminiProvider.search`
-does (API version `v1`, model from `GEMINI_MODEL`, tool `google_search`, no
-system instruction) and evaluates the raw interaction below the adapter,
+does (API version `v1`, model from `GEMINI_MODEL`, tool `google_search`, the
+search system instruction `SEARCH_INSTRUCTION` from ADR 0006) and evaluates the raw interaction below the adapter,
 because the adapter output no longer contains the block boundaries.
 
 ```bash
