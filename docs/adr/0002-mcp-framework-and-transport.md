@@ -1,6 +1,6 @@
 ---
 status: proposed
-date: 2026-11-10
+date: 2026-11-16
 decision-makers: Sven Kroll
 ---
 
@@ -16,15 +16,17 @@ other clients are on the roadmap (`docs/roadmap.md`).
 ## Considered Options
 
 1. Use the official MCP Python SDK directly.
-2. Use FastMCP 4 on top of the official SDK.
+2. Use FastMCP on top of the official SDK.
 3. Write our own JSON-RPC and transport handling.
 
 ## Decision
 
-**Option 2**, FastMCP **4.1.6** pinned exactly, no pre-releases. FastMCP 4 is
-built on MCP Python SDK v2 and negotiates both current and older protocol
-revisions. Tool logic and the Gemini adapter do not import FastMCP; `server.py`
-contains only thin MCP wrappers.
+**Option 2**, FastMCP, stable releases only, pinned exactly in `pyproject.toml`
+and `uv.lock`, which are the only source of its version. Any version, a new major
+version included, is acceptable as long as every requirement of this decision
+holds. FastMCP builds on the official MCP Python SDK and must negotiate both
+current and older protocol revisions. Tool logic and the Gemini adapter do not
+import FastMCP; `server.py` contains only thin MCP wrappers.
 
 The server starts via `mcp.run()`: stdio is the default for local clients,
 `mcp.run(transport="http")` serves Streamable HTTP. The HTTP endpoint is
@@ -51,8 +53,12 @@ Additional requirements for revision 2026-07-28:
 
 ### Verified facts (as of 2026-11-09)
 
-- FastMCP 4.1.6 is the current stable 4.x release; no 4.2 pre-release is used.
-- FastMCP 4.1.x supports Python 3.14 and negotiates between revision
+This is a record of what was verified against the version pinned on that date.
+It states history, not a requirement. Every FastMCP update re-verifies the
+requirements of this decision.
+
+- FastMCP 4.1.6 was the pinned stable release; no pre-release was used.
+- FastMCP 4.1.x supported Python 3.14 and negotiated between revision
   2026-07-28 and older client revisions.
 - Multi-arch compatibility of the final dependency set is checked in the
   container build.

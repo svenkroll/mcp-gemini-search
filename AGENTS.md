@@ -130,6 +130,11 @@ contradicts the ADRs, the ADRs win.
   in the README or an ADR and tested in the same issue.
 - `CHANGELOG.md` gets an entry under "Unreleased" for every user-visible change.
 - Do not commit archives or binary files.
+- Dependency versions have one source: `pyproject.toml` and `uv.lock` for Python
+  packages, the pin itself for container images and actions. ADRs, docstrings and
+  documentation do not repeat a pinned version. A version may appear only inside a
+  dated record of verified facts (e.g. "Verified facts (as of <date>)"), which
+  states history, not a requirement.
 
 ## Git and Review
 

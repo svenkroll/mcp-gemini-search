@@ -23,9 +23,9 @@ the Origin guard and serving HTTP (ADR 0009). Tool behaviour stays in
 Logging goes to ``sys.stdout`` as ADR 0007 requires, also with the stdio
 transport: while the MCP SDK serves stdio it diverts file descriptor 1 to
 stderr and writes protocol messages through a private duplicate, so log lines
-never corrupt the JSON-RPC stream (``mcp.server.stdio``, ``mcp==2.3.0``).
+never corrupt the JSON-RPC stream (``mcp.server.stdio``).
 
-Verified for the pinned ``fastmcp==4.1.6`` (``mcp==2.3.0``, ``mcp-types==2.3.0``):
+Behavior relied on, re-verified on every dependency update:
 ``mcp_types.version`` lists ``2026-07-28`` as modern (per-request envelope)
 revision and ``2024-11-05`` to ``2025-11-25`` as handshake revisions; the
 Streamable HTTP endpoint serves both generations.
