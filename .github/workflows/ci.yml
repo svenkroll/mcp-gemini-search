@@ -19,13 +19,10 @@ jobs:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - name: Install uv
+      - name: Install uv from the Dockerfile
         run: |
-          curl -fsSL --retry 3 -o /tmp/uv.tar.gz \
-            https://github.com/astral-sh/uv/releases/download/0.13.7/uv-x86_64-unknown-linux-musl.tar.gz
-          echo "287491da03f2a785c70fa75b13e1f849918c2f2b5415fe84876b8214eeb792f9  /tmp/uv.tar.gz" | sha256sum --check --strict
-          tar -xzf /tmp/uv.tar.gz -C /tmp
-          install -m 755 /tmp/uv-x86_64-unknown-linux-musl/uv /tmp/uv-x86_64-unknown-linux-musl/uvx /usr/local/bin/
+          scripts/ci/export-uv.sh "$RUNNER_TEMP/uv"
+          install -m 755 "$RUNNER_TEMP/uv/uv" "$RUNNER_TEMP/uv/uvx" /usr/local/bin/
           uv --version
 
       - name: Install Python 3.14
