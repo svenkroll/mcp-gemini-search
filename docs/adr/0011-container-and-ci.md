@@ -76,7 +76,7 @@ Any other action requires a change of this ADR.
 | Step | Runs when these paths change |
 | --- | --- |
 | linux/amd64 build, image scan, smoke test | `Dockerfile`, `.dockerignore`, `pyproject.toml`, `uv.lock`, `src/` |
-| linux/arm64 build, natively on `ubuntu-24.04-arm` | `Dockerfile`, `.dockerignore`, `uv.lock` |
+| linux/arm64 build, natively on a GitHub-hosted arm64 runner | `Dockerfile`, `.dockerignore`, `uv.lock` |
 | proxy test | `Caddyfile`, `compose.yaml` |
 | Renovate configuration check (validator and extraction dry run in the pinned Renovate image) | `renovate.json` |
 | every step above | `scripts/ci/` (including `scripts/ci/proxy-stub/`), `.github/workflows/` |
