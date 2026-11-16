@@ -105,6 +105,15 @@ instructions found in the content, and demands an explicit statement when the
 content does not answer the question.
 """
 
+SEARCH_INSTRUCTION = (
+    "Prefer primary and official sources: standards bodies, authorities, project "
+    "or vendor websites, official repositories and release notes. Use secondary "
+    "sources only when no primary source covers a point, and say so in the answer. "
+    "Attribute a statement to a source only if that source states it. Mark your own "
+    "conclusions, estimates and expected dates as such, without a citation."
+)
+"""English system instruction sent with every ``search`` call (ADR 0006)."""
+
 _SEARCH_TOOL: dict[str, str] = {"type": "google_search"}
 """Request tool parameter enabling Google Search (``GoogleSearchParam``)."""
 
@@ -135,16 +144,6 @@ WallClock = Callable[[], float]
 """Replacement for ``time.time`` (seconds since the epoch); injectable so tests own
 the evaluation of HTTP-date ``Retry-After`` values."""
 
-
-
-SEARCH_INSTRUCTION = (
-    "Prefer primary and official sources: standards bodies, authorities, project "
-    "or vendor websites, official repositories and release notes. Use secondary "
-    "sources only when no primary source covers a point, and say so in the answer. "
-    "Attribute a statement to a source only if that source states it. Mark your own "
-    "conclusions, estimates and expected dates as such, without a citation."
-)
-"""System instruction sent with every ``search`` call (work in progress)."""
 
 class InteractionsClient(Protocol):
     """System boundary to the asynchronous Gemini interactions API.
