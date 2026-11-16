@@ -137,11 +137,12 @@ search, and that the fact suffix produced "not publicly known" for a figure that
 does not exist. Manual runs on 2026-11-15 with Qwen 3.8 27B and DeepSeek V4.1
 Flash in OpenCode showed that calling agents send search keywords unless the
 description and the `query` description tell them to write a question; S1
-and the `query` description are worded for that. The description must not claim that every answer is grounded,
-must not promise a number of sources and must not use evaluation terms. The texts change
-the schema description of `query` only, not the schema itself. The Gemini
-request gains the system instruction from ADR 0006; the evidence rule above
-is the only change in the output.
+and the `query` description are worded for that. The description must not
+claim that every answer is grounded, must not promise a number of sources and
+must not use evaluation terms. The texts change the schema description of
+`query` only, not the schema itself. The Gemini request gains the system
+instruction from ADR 0006; the evidence rule above is the only change in the
+output.
 
 ## Consequences
 

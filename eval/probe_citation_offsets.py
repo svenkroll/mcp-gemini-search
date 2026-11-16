@@ -9,10 +9,11 @@ Requests go through :class:`CapturingProvider`, a :class:`GeminiProvider`
 that keeps the raw interaction of its last successful call, so every request
 is sent exactly as :meth:`GeminiProvider.search` sends it: API version
 ``v1`` (``GEMINI_API_VERSION``), the model from ``GEMINI_MODEL``, the prompt
-as plain-text input, ``tools=[{"type": "google_search"}]``, no system
-instruction, and the adapter's timeout, retry and concurrency limits from the
-ADR 0010 settings. The probe evaluates the raw interaction below the adapter
-because the adapter output no longer contains block boundaries.
+as plain-text input, ``tools=[{"type": "google_search"}]``, the search
+system instruction ``SEARCH_INSTRUCTION`` (ADR 0006), and the adapter's
+timeout, retry and concurrency limits from the ADR 0010 settings. The probe
+evaluates the raw interaction below the adapter because the adapter output no
+longer contains block boundaries.
 
 Terms used throughout:
 

@@ -247,9 +247,10 @@ class GeminiProvider:
 
         Sends one interaction with the model from the settings, the query as
         the plain-text input and Google Search enabled
-        (``tools=[{"type": "google_search"}]``); no system instruction is
-        sent. The query is passed to the API unchanged (input validation is
-        out of scope, issue #4).
+        (``tools=[{"type": "google_search"}]``). Sends
+        :data:`SEARCH_INSTRUCTION` as the system instruction (ADR 0006); the
+        query is still passed to the API unchanged (input validation is out of
+        scope, issue #4).
 
         Args:
             query: search query as given by the caller.
