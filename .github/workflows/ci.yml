@@ -46,7 +46,7 @@ jobs:
   # changed paths; `container` is the single required check and also succeeds
   # when nothing was selected.
   container-changes:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 5
     outputs:
       build_amd64: ${{ steps.all.outputs.build_amd64 || steps.diff.outputs.build_amd64 }}
@@ -74,7 +74,7 @@ jobs:
   container-image-amd64:
     needs: container-changes
     if: needs.container-changes.outputs.build_amd64 == 'true'
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 15
     steps:
       - name: Checkout
@@ -106,7 +106,7 @@ jobs:
   container-image-arm64:
     needs: container-changes
     if: needs.container-changes.outputs.build_arm64 == 'true'
-    runs-on: ubuntu-24.04-arm
+    runs-on: ubuntu-26.04-arm
     timeout-minutes: 15
     steps:
       - name: Checkout
@@ -127,7 +127,7 @@ jobs:
   container-proxy:
     needs: container-changes
     if: needs.container-changes.outputs.proxy_test == 'true'
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 10
     steps:
       - name: Checkout
@@ -139,7 +139,7 @@ jobs:
   renovate-config:
     needs: container-changes
     if: needs.container-changes.outputs.renovate_check == 'true'
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 10
     steps:
       - name: Checkout
@@ -156,7 +156,7 @@ jobs:
       - container-proxy
       - renovate-config
     if: always()
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 5
     steps:
       - name: Checkout

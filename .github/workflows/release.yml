@@ -20,7 +20,7 @@ env:
 
 jobs:
   tag-check:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 5
     outputs:
       version: ${{ steps.tag.outputs.version }}
@@ -39,7 +39,7 @@ jobs:
 
   dockerfile-lint:
     needs: tag-check
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 5
     steps:
       - name: Checkout
@@ -50,7 +50,7 @@ jobs:
 
   image-amd64:
     needs: [tag-check, dockerfile-lint]
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 20
     outputs:
       digest: ${{ steps.build.outputs.digest }}
@@ -97,7 +97,7 @@ jobs:
 
   image-arm64:
     needs: [tag-check, dockerfile-lint]
-    runs-on: ubuntu-24.04-arm
+    runs-on: ubuntu-26.04-arm
     timeout-minutes: 20
     outputs:
       digest: ${{ steps.build.outputs.digest }}
@@ -144,7 +144,7 @@ jobs:
 
   publish:
     needs: [tag-check, image-amd64, image-arm64]
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 5
     steps:
       - name: Checkout
