@@ -26,5 +26,8 @@ htmlcov/
 .vscode/
 .DS_Store
 
+# Local Claude Code settings (per user, not shared)
+.claude/settings.local.json
+
 # Temporary issue drafts, imported once into GitHub Issues
 .issue-drafts/

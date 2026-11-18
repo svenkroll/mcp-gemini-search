@@ -166,7 +166,7 @@ to change. What is already clear:
   - [Data protection](#data-protection)
   - [Costs](#costs): prices and what a call costs
 - Develop
-  - [Development](#development)
+  - [Development](#development), including [working with the agents](#working-with-the-agents)
   - [Release](#release): publishing the container image
   - [Documentation](#documentation)
 
@@ -842,7 +842,26 @@ Dockerfile              Container image
 compose.yaml            Local setup: server and Caddy
 Caddyfile               Local reverse proxy configuration
 .github/workflows/      CI and release workflows
+.claude/                Claude Code agents, skill, scripts and permissions
 ```
+
+### Working with the agents
+
+Development runs through agents in [Claude Code](https://code.claude.com/docs).
+The roles, the `renovate-upgrade` skill, the helper scripts and the permissions
+live under [`.claude/`](.claude/) and are written for the Claude Code harness
+(sub-agents, `claude --agent`); they do not run unchanged in other harnesses.
+The shared working rules are in [`AGENTS.md`](AGENTS.md). Both entry points are
+started as the main agent from a clean checkout of `main`, with `gh` logged in:
+
+| Agent | Start | What it does |
+| --- | --- | --- |
+| `orchestrator` | `claude --agent orchestrator 'owner/repo#<issue>'` | Implements one GitHub issue: `architect` writes the skeleton, `test-writer` writes the tests first, `implementer` (or `implementer-strong`) implements, `reviewer` reviews independently. Ends with a pull request with green CI or a documented abort on the issue. Never merges. |
+| `renovate-orchestrator` | `claude --agent renovate-orchestrator 'owner/repo#<pr> [dry-run]'` | Handles one Renovate pull request: `dependency-implementer` analyses the update and adapts code, `dependency-reviewer` reviews it. Merges through `.claude/scripts/merge-dependency-pr.sh` only when every condition in [Dependency Update Pull Requests](AGENTS.md#dependency-update-pull-requests) holds; otherwise labels the PR `needs-human`. `dry-run` stops before the merge. |
+
+Tasks outside these workflows go to the `assistant` role
+(`claude --agent assistant '<task>'`). Per-user overrides belong in
+`.claude/settings.local.json`, which git ignores.
 
 ## Release
 
