@@ -1,8 +1,9 @@
 # Working Rules for Gemini Search MCP
 
 This file is the central instruction for people and agents working on this
-repository, in particular for the OpenHands orchestrator and its roles
-`architect`, `implementer`, `implementer-strong`, `test-writer` and `reviewer`.
+repository, in particular for the Claude Code agents under `.claude/agents/`: the
+orchestrator and its roles `architect`, `implementer`, `implementer-strong`,
+`test-writer` and `reviewer`.
 There is deliberately no `CLAUDE.md` and no second copy of these rules.
 
 The "Project Contract" section is mandatory. If a required entry is missing,
