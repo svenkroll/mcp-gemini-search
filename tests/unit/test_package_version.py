@@ -11,6 +11,7 @@ Issue edge cases covered here:
 - EC3: ``__version__`` is resolved at import; the tests reload the package
 """
 
+import asyncio
 import importlib
 import importlib.metadata
 import tomllib
@@ -51,13 +52,16 @@ def reload_package() -> Iterator[Any]:
     importlib.reload(gemini_search_mcp)
 
 
-@pytest.mark.parametrize("mode", ["legacy", "auto"])
-async def test_reproduce_server_info_reports_package_version(mode: str) -> None:
+async def _server_info(mode: str) -> Any:
     settings = Settings(gemini_api_key="fake-gemini-key-AIzaSyFAKE0123456789")
     server = build_server(settings, FakeProvider(), resolver=_identity_resolver)
-
     async with Client(server, mode=mode) as client:
-        info = client.server_info
+        return client.server_info
+
+
+@pytest.mark.parametrize("mode", ["legacy", "auto"])
+def test_reproduce_server_info_reports_package_version(mode: str) -> None:
+    info = asyncio.run(_server_info(mode))
 
     assert info.name == SERVER_NAME == "gemini-search-mcp"
     assert info.version == importlib.metadata.version(DISTRIBUTION_NAME)
