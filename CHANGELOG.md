@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- #81: `serverInfo.version` in the MCP `initialize` response now reports the
+  version of this server (`project.version`, read from the installed package
+  metadata) instead of the version of the FastMCP framework. If the metadata is
+  missing, the version is `0+unknown`.
+
 ### Changed
 
 - #55: `search` guides callers to full questions: the tool description starts

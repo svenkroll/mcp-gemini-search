@@ -60,6 +60,7 @@ from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 from starlette.types import ASGIApp, Receive, Scope, Send
 
+from gemini_search_mcp import __version__
 from gemini_search_mcp.config import LogLevel, Settings, load_settings_or_exit
 from gemini_search_mcp.gemini_client import GeminiProvider
 from gemini_search_mcp.provider import SearchProvider, Usage
@@ -607,6 +608,7 @@ def build_server(
     """
     server = FastMCP(
         name=SERVER_NAME,
+        version=__version__,
         instructions=SERVER_INSTRUCTIONS,
         mask_error_details=True,
         auth=build_auth(settings),
