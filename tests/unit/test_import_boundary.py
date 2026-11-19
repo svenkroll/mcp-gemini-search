@@ -40,7 +40,8 @@ ALLOWED_INTERNAL: dict[str, frozenset[str]] = {
     "gemini_client": frozenset({"provider", "config"}),
     "urlpolicy": frozenset(),
     "tools": frozenset({"provider", "urlpolicy", "config"}),
-    "server": frozenset({"provider", "config", "gemini_client", "urlpolicy", "tools"}),
+    # The empty name is the package root itself: ``server`` reads ``__version__`` from it.
+    "server": frozenset({"", "provider", "config", "gemini_client", "urlpolicy", "tools"}),
     ROOT_MODULE: frozenset({"config", "provider", "gemini_client", "urlpolicy", "tools", "server"}),
 }
 
