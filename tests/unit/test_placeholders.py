@@ -1,6 +1,7 @@
 """Unit tests for the documented package placeholders created by issue #1."""
 
 import importlib
+import importlib.metadata
 
 import pytest
 
@@ -21,7 +22,7 @@ def test_placeholder_modules_have_docstring(module_name: str) -> None:
 
 
 def test_package_exposes_version() -> None:
-    assert gemini_search_mcp.__version__ == "0.0.0"
+    assert gemini_search_mcp.__version__ == importlib.metadata.version("gemini-search-mcp")
     assert gemini_search_mcp.PACKAGE_NAME == "gemini_search_mcp"
 
 
