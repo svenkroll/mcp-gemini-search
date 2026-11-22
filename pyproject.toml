@@ -14,7 +14,7 @@ classifiers = [
 ]
 dependencies = [
     "fastmcp==4.2.0",
-    "google-genai==3.4.0",
+    "google-genai==3.6.1",
     "httpx==0.28.1",
     "pydantic==2.14.3",
     "pydantic-settings==2.16.3",
