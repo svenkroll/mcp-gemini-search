@@ -6,7 +6,7 @@
 
 # The Python base image of both stages, the single place of its version and digest.
 # python 3.14-slim-trixie
-ARG PYTHON_IMAGE=python:3.14-slim-trixie@sha256:9aaa474097d094040649f2162a627c0049b408f52138d980916788d80f04802f
+ARG PYTHON_IMAGE=python:3.14-slim-trixie@sha256:f57c4c23b985d95deea5bc5249e2f9c8a512b4cc9d5d3fd31900cbd2f5f0a604
 
 # The single source of uv: the builder stage copies it from here and the check job
 # exports it with scripts/ci/export-uv.sh.
